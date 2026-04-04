@@ -1,0 +1,183 @@
+PROJECT: CodeMind RAG - Phase 1
+OBJECTIVE: Set up development environment, scaffold Next.js 14 project, and create PROJ_PLAN.md
+
+═══════════════════════════════════════════════════════════════════════════════
+
+BEFORE WRITING ANY CODE, PROVIDE A STEP-BY-STEP PLAN AND WAIT FOR APPROVAL.
+
+Your plan must include:
+1. List all directories/files to be created
+2. All npm packages to be installed (with versions)
+3. Configuration files needed (tailwind.config.ts, tsconfig.json, next.config.js)
+4. Environment template (.env.example)
+5. PROJ_PLAN.md structure and content
+
+Wait for human approval before proceeding with implementation.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TECH STACK ENFORCEMENT:
+- Framework: Next.js 14 (App Router - REQUIRED)
+- Language: TypeScript (strict mode - REQUIRED)
+- Styling: Tailwind CSS (utility-first - REQUIRED)
+- Component Library: Shadcn/ui (for future UI components)
+- Code Editor: Monaco Editor (for code viewing - install @monaco-editor/react)
+- Syntax Highlighting: Prism.js
+- Runtime: Node.js 18+ (verify with node --version)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TASKS:
+
+1. **Initialize Next.js 14 Project**
+   - Create new Next.js 14 app with TypeScript enabled
+   - Use App Router (NOT Pages Router)
+   - Enable strict TypeScript mode (tsconfig.json strict: true)
+   - Project name: codemind-rag
+
+2. **Directory Structure**
+   Create the following structure:
+codemind-rag/
+├── app/
+│   ├── layout.tsx
+│   ├── page.tsx
+│   └── globals.css
+├── components/
+│   ├── ChatInterface.tsx
+│   ├── CodeViewer.tsx
+│   ├── FileTree.tsx
+│   ├── RepoInput.tsx
+│   └── ui/
+│       └── Button.tsx (shadcn/ui)
+├── lib/
+│   ├── utils.ts
+│   ├── api.ts
+│   └── constants.ts
+├── public/
+├── styles/
+│   └── globals.css
+├── types/
+│   └── index.ts
+├── .env.example
+├── .env.local (NOT in git)
+├── tailwind.config.ts
+├── tsconfig.json
+├── next.config.js
+├── package.json
+├── PROJ_PLAN.md (CREATE THIS)
+└── README.md
+
+3. **Install Dependencies**
+   Frontend dependencies:
+   - react@latest
+   - next@14
+   - typescript@latest
+   - tailwindcss@latest
+   - postcss@latest
+   - autoprefixer@latest
+   - @monaco-editor/react@latest
+   - prismjs@latest
+   - axios@latest (for API calls)
+   - clsx@latest (for conditional classes)
+   - @radix-ui/react-slot@latest (for shadcn)
+   - class-variance-authority@latest (for shadcn)
+
+4. **Configure Tailwind CSS**
+   - Set up tailwind.config.ts with proper theme configuration
+   - Configure PostCSS (postcss.config.js)
+   - Add Tailwind directives to globals.css
+
+5. **Configure TypeScript**
+   - Set tsconfig.json to strict mode
+   - Add path aliases (@/ for src imports)
+   - Enable strict null checks, strict function types
+
+6. **Create .env.example**
+```env
+   # Backend API
+   NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+   NEXT_PUBLIC_API_TIMEOUT=30000
+
+   # Feature Flags
+   NEXT_PUBLIC_ENABLE_ANALYTICS=false
+   NEXT_PUBLIC_MAX_QUERY_LENGTH=500
+```
+
+7. **Create PROJ_PLAN.md**
+   This file will be the source of truth for the project state.
+   Include:
+   - Project overview (1 sentence)
+   - Current phase number and name
+   - Completed phases checklist
+   - Current implementation status
+   - Known issues (if any)
+   - Next phase preview
+   - Tech stack confirmed
+   - API contract (to be updated each phase)
+   - Database schema (to be updated)
+   - Timestamps for phase completion
+
+8. **Home Page Setup (app/page.tsx)**
+   - Create a minimal home page that says "CodeMind RAG - Phase 1 Setup Complete"
+   - Add a health check indicator
+   - Show backend connection status (will be gray initially)
+   - Create navigation placeholder for future components
+
+9. **README.md**
+   - Project description
+   - Tech stack
+   - Setup instructions
+   - Development server instructions (npm run dev)
+   - Phases overview
+   - Current phase status
+
+10. **Git Setup**
+    - Initialize git (if not already done)
+    - Create .gitignore (node_modules, .env.local, .next, dist, etc.)
+    - Make initial commit: "Phase 1: Next.js 14 scaffolding complete"
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ACCEPTANCE CRITERIA:
+
+✓ Next.js 14 project created with TypeScript strict mode enabled
+✓ All dependencies installed without errors (npm install succeeds)
+✓ Tailwind CSS configured and working (run: npm run build to verify)
+✓ Development server starts: npm run dev (no errors)
+✓ Home page accessible at http://localhost:3000
+✓ All required directories exist
+✓ PROJ_PLAN.md created with Phase 1 checklist
+✓ .env.example contains all frontend environment variables
+✓ TypeScript strict mode confirmed in tsconfig.json
+✓ Git initialized with .gitignore configured
+
+VERIFICATION STEPS:
+1. Run: npm run dev → server starts on port 3000
+2. Open browser: http://localhost:3000 → home page loads
+3. Check: ls -la to confirm directory structure
+4. Check: cat PROJ_PLAN.md → confirms Phase 1 completion
+5. Check: npm run build → no TypeScript errors
+6. Check: git status → .gitignore prevents node_modules from being staged
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DELIVERABLES:
+
+1. ✓ Next.js 14 app ready to run
+2. ✓ TypeScript strict mode enabled
+3. ✓ Tailwind CSS working
+4. ✓ PROJ_PLAN.md created and documented
+5. ✓ .env.example template for frontend
+6. ✓ Basic home page (no functionality yet)
+7. ✓ Git initialized with first commit
+8. ✓ README.md with setup instructions
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NOTES FOR REPLIT AGENT:
+
+- Do NOT create backend yet (FastAPI, Python). That's Phase 2+.
+- Do NOT install database drivers yet (Supabase, Pinecone). That's Phase 4.
+- Focus ONLY on frontend scaffolding and planning document.
+- Keep component files empty/minimal (just imports for now).
+- All heavy lifting happens in subsequent phases.
