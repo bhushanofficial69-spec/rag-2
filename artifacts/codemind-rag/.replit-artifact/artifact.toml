@@ -1,0 +1,24 @@
+kind = "web"
+previewPath = "/"
+title = "CodeMind RAG"
+version = "1.0.0"
+id = "artifacts/codemind-rag"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23968
+
+[services.development]
+run = "pnpm --filter @workspace/codemind-rag run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/codemind-rag", "run", "build" ]
+
+[services.env]
+PORT = "23968"
