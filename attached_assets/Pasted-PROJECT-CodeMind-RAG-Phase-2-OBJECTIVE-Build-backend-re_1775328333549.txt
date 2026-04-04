@@ -1,0 +1,308 @@
+PROJECT: CodeMind RAG - Phase 2
+OBJECTIVE: Build backend repo cloning + ingestion API
+
+═══════════════════════════════════════════════════════════════════════════════
+
+BEFORE WRITING ANY CODE:
+1. Read PROJ_PLAN.md to understand current state
+2. Read all files in codemind-rag/ to see what exists
+3. List your step-by-step plan and wait for approval
+
+Do NOT proceed until approval is given.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TECH STACK ENFORCEMENT:
+- Backend Framework: FastAPI (Python 3.11+)
+- Async/Background Tasks: AsyncIO + FastAPI BackgroundTasks
+- Repo Cloning: GitPython
+- File Operations: pathlib, os, shutil
+- Logging: Python logging + structlog
+- HTTP: Uvicorn (ASGI server)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CONTEXT:
+- Phase 1 completed: Next.js 14 frontend scaffold ready
+- This phase: Create Python/FastAPI backend in separate directory
+- Project structure: codemind-rag/frontend (Next.js) + codemind-rag/backend (FastAPI)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TASKS:
+
+1. **Create Backend Directory Structure**
+codemind-rag/backend/
+├── main.py
+├── config.py
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── routers/
+│   ├── init.py
+│   ├── ingest.py
+│   ├── health.py
+│   └── query.py (empty for now)
+├── services/
+│   ├── init.py
+│   ├── repo_cloner.py
+│   ├── file_filter.py
+│   └── ingestion.py
+├── models/
+│   ├── init.py
+│   └── schemas.py
+├── utils/
+│   ├── init.py
+│   └── logger.py
+├── Dockerfile
+├── docker-compose.yml
+└── README.md
+
+2. **Create requirements.txt**
+   Exact versions:
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+gitpython==3.1.40
+structlog==24.1.0
+httpx==0.25.2
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+3. **config.py - Environment Configuration**
+   Use Pydantic BaseSettings to load:
+   - BACKEND_URL (default: http://localhost:8000)
+   - GITHUB_TOKEN (optional, for auth)
+   - MAX_REPO_SIZE (MB, default: 500)
+   - MAX_FILES (default: 5000)
+   - TEMP_DIR (default: ./temp)
+   - LOG_LEVEL (default: INFO)
+
+4. **models/schemas.py - Pydantic Models**
+   Create request/response models:
+```python
+   class IngestRequest(BaseModel):
+       repo_url: str  # https://github.com/owner/repo
+       branch: str = "main"
+   
+   class IngestResponse(BaseModel):
+       status: str  # "processing" | "queued"
+       job_id: str
+       message: str
+   
+   class IngestionStatus(BaseModel):
+       job_id: str
+       status: str  # "processing" | "completed" | "failed"
+       files_indexed: int
+       chunks_created: int
+       error: Optional[str]
+       progress_percent: int
+   
+   class HealthResponse(BaseModel):
+       status: str  # "ok"
+       timestamp: str
+       services: Dict[str, str]  # qdrant, groq, huggingface status
+```
+
+5. **services/repo_cloner.py - Repository Cloning**
+   Implement RepoCloner class with:
+   - Method: clone_repo(repo_url: str, branch: str, temp_dir: str) -> str
+   - Returns: path to cloned directory
+   - Features:
+     * Validate GitHub URL format
+     * Use GitPython to clone
+     * Handle authentication with GITHUB_TOKEN
+     * Timeout: 5 minutes per clone
+     * Error handling: invalid URL, network error, permission denied
+   - Logging: DEBUG before clone, INFO after success, ERROR if failed
+
+6. **services/file_filter.py - File Filtering**
+   Implement FileFilter class with:
+   - Method: get_code_files(repo_path: str) -> List[str]
+   - Rules:
+     * Include: .py, .js, .jsx, .ts, .tsx, .java
+     * Exclude directories: node_modules, .git, __pycache__, dist, build, venv, .venv, vendor, .next, .nuxt
+     * Skip files > 100KB
+     * Returns: list of file paths (absolute paths)
+   - Logging: INFO for each filtered directory
+
+7. **services/ingestion.py - Main Ingestion Orchestrator**
+   Implement IngestionService class with:
+   - Method: ingest_repo(repo_url: str, branch: str) -> job_id
+   - Flow:
+     1. Validate input (URL format, branch name)
+     2. Clone repo to temp directory
+     3. Get all code files (use FileFilter)
+     4. Log stats (X files found)
+     5. For each file:
+        a. Read file content
+        b. Detect language
+        c. (Phase 3) Will chunk here
+     6. Return job_id
+   - Job tracking: Use in-memory dict {job_id: IngestionStatus}
+   - Error handling: Cleanup temp files on failure
+
+8. **routers/health.py - Health Check Endpoint**
+   Implement GET /api/health:
+   - Response: HealthResponse
+   - Check status of: Qdrant (offline for now), Groq (offline), HuggingFace (offline)
+   - Status values: "connected" | "disconnected" | "unknown"
+   - Include: timestamp, uptime_seconds
+
+9. **routers/ingest.py - Ingestion Endpoints**
+   Implement two endpoints:
+   
+   a) POST /api/ingest
+      - Request: IngestRequest (repo_url, branch)
+      - Response: IngestResponse (status, job_id)
+      - Status code: 202 (Accepted - async)
+      - Flow:
+        1. Validate request
+        2. Create job_id (use uuid4)
+        3. Start background task (BackgroundTasks)
+        4. Return immediately with job_id
+   
+   b) GET /api/ingest/status/{job_id}
+      - Response: IngestionStatus
+      - Status codes:
+        * 200: Found (completed, processing, or failed)
+        * 404: Job ID not found
+      - Return: current status with progress_percent, files_indexed, error if any
+
+10. **main.py - FastAPI App Entry Point**
+```python
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
+    
+    app = FastAPI(title="CodeMind RAG API", version="0.1.0")
+    
+    # CORS: Allow frontend localhost:3000
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Include routers
+    app.include_router(health.router)
+    app.include_router(ingest.router)
+    
+    @app.on_event("startup")
+    async def startup():
+        logger.info("CodeMind RAG API starting...")
+    
+    if __name__ == "__main__":
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+11. **utils/logger.py - Structured Logging**
+    Set up structlog with:
+    - Log level from config (default: INFO)
+    - Console output (pretty-printed in dev)
+    - JSON output (for production)
+    - Correlation IDs for tracing requests
+
+12. **Dockerfile**
+```dockerfile
+    FROM python:3.11-slim
+    WORKDIR /app
+    COPY requirements.txt .
+    RUN pip install --no-cache-dir -r requirements.txt
+    COPY . .
+    EXPOSE 8000
+    CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+13. **docker-compose.yml (for local dev)**
+    Services:
+    - backend: FastAPI app, port 8000, volume mount for code
+    - (Add Qdrant in Phase 4)
+
+14. **.env.example**
+```env
+    # GitHub
+    GITHUB_TOKEN=your-github-token
+    
+    # Ingestion Config
+    MAX_REPO_SIZE=500
+    MAX_FILES=5000
+    TEMP_DIR=./temp
+    
+    # Logging
+    LOG_LEVEL=INFO
+    
+    # API Config
+    BACKEND_URL=http://localhost:8000
+```
+
+15. **Update PROJ_PLAN.md**
+    - Mark Phase 1 as ✓ COMPLETE
+    - Update current phase to: Phase 2 - Repo Cloning (IN PROGRESS)
+    - Add section: "API Contract" with endpoints documented
+    - Add section: "Job Tracking" with in-memory structure
+    - Add notes on backend structure
+
+16. **Backend README.md**
+    - Setup instructions: python -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+    - Run: uvicorn main:app --reload --host 0.0.0.0 --port 8000
+    - Test endpoints with curl examples
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ACCEPTANCE CRITERIA:
+
+✓ Backend directory structure created with all modules
+✓ requirements.txt contains all dependencies (pinned versions)
+✓ FastAPI app starts: uvicorn main:app --reload (port 8000)
+✓ GET /api/health returns 200 with correct JSON structure
+✓ POST /api/ingest accepts valid GitHub URL, returns job_id (202 status)
+✓ POST /api/ingest rejects invalid URLs (400 status)
+✓ GET /api/ingest/status/{job_id} returns status (200 for existing, 404 for missing)
+✓ Repo cloning works (test with https://github.com/torvalds/linux repo - should fail on file count, that's ok)
+✓ File filtering correctly excludes node_modules, .git, __pycache__
+✓ All logging uses structlog and shows in console
+✓ CORS enabled: curl -H "Origin: http://localhost:3000" returns CORS headers
+✓ PROJ_PLAN.md updated with Phase 2 progress
+
+VERIFICATION STEPS:
+
+1. Start backend: cd backend && uvicorn main:app --reload
+2. Health check: curl http://localhost:8000/api/health
+3. Test ingest (bad URL): curl -X POST http://localhost:8000/api/ingest -H "Content-Type: application/json" -d '{"repo_url":"invalid"}'
+4. Test ingest (valid URL): curl -X POST http://localhost:8000/api/ingest -H "Content-Type: application/json" -d '{"repo_url":"https://github.com/facebook/react","branch":"main"}'
+5. Get job status: curl http://localhost:8000/api/ingest/status/{job_id}
+6. Watch logs: should see DEBUG, INFO messages
+7. Check temp dir: ls -la temp/ to see cloned repo
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DELIVERABLES:
+
+1. ✓ FastAPI backend skeleton with all routers
+2. ✓ RepoCloner service (clone + error handling)
+3. ✓ FileFilter service (language detection + directory exclusion)
+4. ✓ IngestionService orchestrator (basic)
+5. ✓ POST /api/ingest working (job submission)
+6. ✓ GET /api/ingest/status/{job_id} working (progress polling)
+7. ✓ GET /api/health working
+8. ✓ Pydantic models for request/response validation
+9. ✓ Structured logging with structlog
+10. ✓ CORS configured for frontend
+11. ✓ Dockerfile for containerization
+12. ✓ docker-compose.yml for local dev
+13. ✓ PROJ_PLAN.md updated
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NOTES FOR REPLIT AGENT:
+
+- RepoCloner is BLOCKING and runs in background task (OK for MVP)
+- Job tracking uses in-memory dict (will be lost on restart - OK for dev)
+- Temp directory cleaned up after ingestion
+- No database yet (Phase 4: Qdrant integration)
+- No chunking yet (Phase 3: will add)
+- No embeddings yet (Phase 5)
