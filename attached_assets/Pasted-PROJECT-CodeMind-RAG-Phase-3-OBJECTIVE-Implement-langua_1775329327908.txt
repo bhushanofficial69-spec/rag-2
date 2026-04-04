@@ -1,0 +1,249 @@
+PROJECT: CodeMind RAG - Phase 3
+OBJECTIVE: Implement language-aware code chunking with line number tracking
+
+═══════════════════════════════════════════════════════════════════════════════
+
+BEFORE WRITING ANY CODE:
+1. Read PROJ_PLAN.md (current state and completed phases)
+2. Review backend/ directory (understand Phase 2 structure)
+3. List your plan for chunking implementation and wait for approval
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TECH STACK ENFORCEMENT:
+- Language Detection: langdetect or manual (file extension)
+- Chunking: LangChain RecursiveCharacterTextSplitter
+- AST Parsing: ast (Python), regex (JavaScript/TypeScript)
+- Token Counting: tiktoken or len() for MVP
+- Integration: Add to services/chunking.py and services/ingestion.py
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CONTEXT:
+- Phase 1-2 completed: Frontend scaffolded, backend repo cloning working
+- This phase: Split code into intelligent chunks respecting language structure
+- Required for Phase 4: Chunks must have metadata (file_path, start_line, end_line, language)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TASKS:
+
+1. **Create services/chunking.py**
+   Implement ChunkingService class with:
+   
+   a) Method: detect_language(file_path: str) -> str
+      - Input: file path like "src/auth/login.py"
+      - Returns: "python" | "javascript" | "typescript" | "java"
+      - Use file extension (.py, .js, .ts, .tsx, .java)
+      - Return "unknown" for unsupported languages
+      - Logging: DEBUG for each detection
+   
+   b) Method: get_language_separators(language: str) -> List[str]
+      - Returns language-specific split points
+      - Python: ["\nclass ", "\ndef ", "\nasync def ", "\n\n", "\n", ". ", " "]
+      - JavaScript/TypeScript: ["\nfunction ", "\nconst ", "\nlet ", "\nvar ", "\nclass ", "\n\n", "\n", ". ", " "]
+      - Java: ["\npublic class ", "\nprivate class ", "\nprotected class ", "\npublic static ", "\npublic ", "\n\n", "\n"]
+      - Default: ["\n\n", "\n", ". ", " "]
+   
+   c) Method: chunk_code(code: str, language: str, file_path: str, start_line: int = 1) -> List[CodeChunk]
+      - Input: raw code string, language, file path
+      - Use RecursiveCharacterTextSplitter with language separators
+      - Target: 512 tokens per chunk, 50 token overlap
+      - Min chunk size: 100 tokens (skip smaller chunks)
+      - Output: List of CodeChunk objects
+   
+   d) Class: CodeChunk (dataclass or Pydantic model)
+```python
+      class CodeChunk(BaseModel):
+          file_path: str
+          start_line: int
+          end_line: int
+          language: str
+          content: str
+          function_name: Optional[str]
+          char_count: int
+          token_count: int  # approximate
+```
+
+2. **Implement Line Number Tracking**
+   Challenge: RecursiveCharacterTextSplitter doesn't track line numbers.
+   Solution:
+   - Split code into chunks
+   - For each chunk, find its position in original code
+   - Count newlines before chunk to get start_line
+   - Count newlines in chunk to get end_line
+   - Store in CodeChunk metadata
+   
+   Example:
+```python
+   def get_line_numbers(original_code: str, chunk_content: str, chunk_index: int) -> Tuple[int, int]:
+       lines_before = original_code[:original_code.find(chunk_content)].count('\n')
+       lines_in_chunk = chunk_content.count('\n')
+       return (lines_before + 1, lines_before + lines_in_chunk + 1)
+```
+
+3. **Implement Function Name Extraction**
+   For each chunk, extract function/class name:
+   - Python: Use ast.parse() to find all functions/classes, match to chunk
+   - JavaScript/TypeScript: Use regex: /(?:function|const|class)\s+(\w+)/
+   - Java: Use regex: /(?:public|private|protected)?\s*(?:static)?\s*(?:class|interface)\s+(\w+)/
+   - Store in CodeChunk.function_name (None if not found)
+
+4. **Create services/language_parser.py**
+   Implement LanguageParser class with:
+   - Method: extract_dependencies(code: str, language: str, file_path: str) -> List[str]
+   - Python: Parse ast.Import and ast.ImportFrom nodes
+   - JavaScript: Regex for import/require statements
+   - Returns: List of dependency file paths
+   - Example: ["src/auth/middleware.py", "src/api/users.py"]
+   - Logging: DEBUG for each extracted dependency
+
+5. **Add to requirements.txt**
+langchain==0.1.0
+langchain-community==0.0.10
+tiktoken==0.5.2
+
+6. **Update services/ingestion.py**
+   Extend IngestionService.ingest_repo() to:
+   - After getting code files:
+     1. For each file:
+        a. Read content
+        b. Detect language
+        c. Chunk code using ChunkingService.chunk_code()
+        d. Extract dependencies using LanguageParser
+        e. Store chunks in IngestionStatus.chunks (list)
+     2. Update progress (X of Y files chunked)
+     3. Return: list of CodeChunk objects
+   
+   Track in IngestionStatus:
+```python
+   class IngestionStatus(BaseModel):
+       job_id: str
+       status: str
+       files_indexed: int
+       chunks_created: int  # NEW
+       total_chunks: int  # NEW
+       error: Optional[str]
+       progress_percent: int
+       chunks: List[CodeChunk] = []  # NEW (store all chunks)
+```
+
+7. **Add Unit Tests**
+   Create tests/test_chunking.py with:
+   - test_detect_language_python() → "python"
+   - test_detect_language_javascript() → "javascript"
+   - test_chunk_python_respects_function_boundaries() → no mid-function splits
+   - test_chunk_line_numbers_accurate() → start_line/end_line match
+   - test_chunk_min_size_enforced() → no chunks < 100 tokens
+   - test_function_name_extraction() → finds function names
+   - test_dependency_extraction_python() → finds imports
+   - test_dependency_extraction_javascript() → finds requires
+
+8. **Update models/schemas.py**
+   Add CodeChunk and extend IngestionStatus:
+```python
+   class CodeChunk(BaseModel):
+       file_path: str
+       start_line: int
+       end_line: int
+       language: str
+       content: str
+       function_name: Optional[str] = None
+       dependencies: List[str] = []
+       char_count: int
+       token_count: int
+   
+   class IngestionStatus(BaseModel):
+       job_id: str
+       status: str
+       files_indexed: int
+       chunks_created: int
+       total_chunks: int
+       error: Optional[str]
+       progress_percent: int
+       chunks: List[CodeChunk] = []
+```
+
+9. **Update PROJ_PLAN.md**
+   - Mark Phase 2 as ✓ COMPLETE
+   - Update current phase: Phase 3 - Chunking (IN PROGRESS → COMPLETE)
+   - Document: "Chunking Strategy" section with separators per language
+   - Document: "CodeChunk Schema" with all fields
+   - Add "Chunk Statistics" (avg chunk size, distribution)
+
+10. **Test Manually**
+    Create test_ingestion_manual.py:
+```python
+    async def test_ingest_small_repo():
+        service = IngestionService()
+        job_id = await service.ingest_repo(
+            repo_url="https://github.com/python-requests/requests",
+            branch="main"
+        )
+        # Poll status until completed
+        status = await service.get_status(job_id)
+        assert status.status == "completed"
+        assert status.chunks_created > 100
+        assert all(chunk.start_line > 0 for chunk in status.chunks)
+        assert all(chunk.end_line >= chunk.start_line for chunk in status.chunks)
+        print(f"✓ Ingested {len(status.chunks)} chunks")
+        for chunk in status.chunks[:3]:
+            print(f"  - {chunk.file_path}:{chunk.start_line}-{chunk.end_line} ({chunk.language})")
+```
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ACCEPTANCE CRITERIA:
+
+✓ Language detection works for .py, .js, .ts, .tsx, .java files
+✓ RecursiveCharacterTextSplitter configured with language-specific separators
+✓ Chunks average 400-512 tokens (within target)
+✓ No chunks split mid-function (Python functions stay together)
+✓ Line numbers accurate (start_line < end_line, match code positions)
+✓ Function names extracted for 90%+ of Python functions
+✓ Dependencies extracted from imports (Python import/from, JS import/require)
+✓ CodeChunk dataclass/model includes all required fields
+✓ IngestionStatus tracks chunks_created and total_chunks
+✓ All chunks have metadata: file_path, start_line, end_line, language, content
+✓ Unit tests pass (pytest test_chunking.py)
+✓ POST /api/ingest returns chunks in status response
+✓ GET /api/ingest/status/{job_id} includes chunks_created count
+✓ Manual test with small repo succeeds (100+ chunks created)
+
+VERIFICATION STEPS:
+
+1. Run tests: cd backend && pytest tests/test_chunking.py -v
+2. Manual test: python test_ingestion_manual.py (watch output)
+3. Verify structure: Check a chunk from output
+   - file_path: matches GitHub file
+   - start_line, end_line: match line numbers in GitHub
+   - language: correct (python, javascript, etc.)
+   - content: actual code text
+   - function_name: present if chunk contains function
+4. Verify accuracy: Open GitHub, check a chunk's line numbers match
+5. Verify no halves: Confirm no function definitions are split
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DELIVERABLES:
+
+1. ✓ ChunkingService class with language-aware splitting
+2. ✓ RecursiveCharacterTextSplitter integrated with language separators
+3. ✓ Line number tracking (accurate start_line, end_line)
+4. ✓ Function name extraction for code chunks
+5. ✓ Dependency extraction (Python, JavaScript, TypeScript)
+6. ✓ CodeChunk dataclass with full metadata
+7. ✓ Unit tests for all chunking logic
+8. ✓ Manual ingestion test working
+9. ✓ IngestionStatus extended with chunks_created, total_chunks
+10. ✓ PROJ_PLAN.md updated with Phase 3 completion
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NOTES FOR REPLIT AGENT:
+
+- Phase 3 is CRITICAL: Chunking quality impacts all downstream phases
+- Line number accuracy is essential for citing sources to users
+- Test with real repos (requests, react, django) before Phase 4
+- No database/embeddings yet (those are Phase 4-5)
+- Chunk storage is in-memory (IngestionStatus.chunks list)
