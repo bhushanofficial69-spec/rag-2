@@ -1,0 +1,1111 @@
+# PRODUCT REQUIREMENTS DOCUMENT (PRD)
+## CodeMind RAG: Intelligent Codebase Search Engine
+
+**Document Version:** 1.0  
+**Last Updated:** April 4, 2026  
+**Status:** Ready for Development  
+**Owner:** Product Team  
+**Stakeholders:** Developers, Technical Leads, Engineering Teams
+
+---
+
+## EXECUTIVE SUMMARY
+
+**CodeMind RAG** is a web-based "Google for Code" that enables developers to ask natural language questions about their codebase and receive instant, accurate answers with exact file references, code snippets, and dependency impact warnings.
+
+### Problem Statement
+
+Developers waste **5-10 hours per week** searching through codebases to answer questions like:
+- "How does user authentication work?"
+- "Where is the payment validation logic?"
+- "If I change this function, what breaks?"
+
+Current solutions fall short:
+- **GitHub Copilot:** Explains only single files, not codebase patterns
+- **grep/IDE search:** Finds exact matches only, misses semantic relationships
+- **Documentation:** Often outdated or incomplete
+- **Asking seniors:** Bottleneck, doesn't scale
+
+### Solution Overview
+
+CodeMind RAG combines **Retrieval-Augmented Generation (RAG)** + **Hybrid Search** to understand both semantic meaning (vector search) and exact terms (keyword search) across entire codebases. It answers questions in <3 seconds with precise citations.
+
+### Target Impact
+
+- **Developers:** 50% faster onboarding, instant codebase answers
+- **Teams:** Reduce knowledge silos, improve code documentation
+- **Portfolio Value:** Demonstrate advanced AI/ML system design
+
+---
+
+## PRODUCT VISION
+
+### Mission Statement
+
+To empower developers with instant, accurate answers about their codebases, reducing time spent on code discovery and enabling faster, more confident refactoring.
+
+### Vision Statement
+
+Build the most intuitive code search experience—where developers ask questions in plain English and get answers like they're talking to a senior engineer who knows the entire codebase.
+
+### Core Values
+
+1. **Accuracy:** No hallucinations, every answer is cited with file paths and line numbers
+2. **Speed:** <3 second response time (after cold start)
+3. **Simplicity:** One question box, intelligent answers
+4. **Transparency:** Users see which files informed each answer
+5. **Scalability:** Works with small projects to enterprise codebases (within free tier limits)
+
+---
+
+## TARGET USERS & PERSONAS
+
+### Primary Personas
+
+#### 1. Junior Developer (First-Day Hire)
+- **Name:** Alex, 1-year experience
+- **Goal:** Understand codebase quickly, reduce onboarding time
+- **Pain:** Lost in 5K-file repository, asking seniors constantly
+- **Expected Use:** "How does the login system work?" → learns from code examples
+- **Value:** 50% faster ramp-up time
+
+#### 2. Open-Source Maintainer
+- **Name:** Jordan, maintains 3 projects
+- **Goal:** Help contributors understand codebase without manual explanations
+- **Pain:** Same questions repeated in issues/Slack
+- **Expected Use:** Link CodeMind to repo, let contributors self-serve
+- **Value:** Reduce support burden, improve contribution quality
+
+#### 3. Code Refactorer (Senior Engineer)
+- **Name:** Sam, refactoring legacy module
+- **Goal:** Understand impact before making changes
+- **Pain:** Ripple effects of changes unclear, risky refactoring
+- **Expected Use:** "If I rename this function, what breaks?" → dependency map
+- **Value:** Confident, safer refactoring
+
+#### 4. Portfolio Builder (CS Student / Career Changer)
+- **Name:** Casey, building portfolio project
+- **Goal:** Showcase advanced AI/ML system design skills
+- **Pain:** Most projects are CRUD apps or simple ML models
+- **Expected Use:** Build, demo, explain RAG architecture to employers
+- **Value:** Interview-ready, impressive project
+
+### Secondary Personas
+
+- **Tech Leads:** Using CodeMind to audit codebase architecture
+- **Documentation Writers:** Generating documentation from code insights
+- **DevOps Engineers:** Understanding deployment code dependencies
+
+---
+
+## PRODUCT GOALS & OBJECTIVES
+
+### Business Goals
+
+| Goal | Metric | Target | Timeline |
+|------|--------|--------|----------|
+| **MVP Launch** | Working prototype | Deploy to Vercel + Render | Week 8 |
+| **Portfolio Value** | GitHub stars | 100+ by month 3 | Month 3 |
+| **Community Adoption** | Active users | 50+ by month 6 | Month 6 |
+| **Scalability Demo** | Largest indexed repo | 10K files | Month 3 |
+
+### User Experience Goals
+
+| Goal | How We'll Measure | Target |
+|------|-------------------|--------|
+| **Easy Onboarding** | Time to ask first question | <2 minutes |
+| **Answer Quality** | Citation accuracy | 90%+ |
+| **Performance** | Query response time | <3 seconds |
+| **User Satisfaction** | NPS (future) | >50 |
+
+### Technical Goals
+
+| Goal | Specification | Rationale |
+|------|---------------|-----------|
+| **Hybrid Search Accuracy** | Both semantic + keyword search | Catch exact terms + concepts |
+| **Language Support (MVP)** | Python + JavaScript | ~70% of developer market |
+| **Code Complexity** | Production-ready code with error handling | Portfolio-grade quality |
+| **Cost** | $0 (all free tiers) | Accessible for anyone |
+
+---
+
+## PRODUCT SCOPE
+
+### In Scope (MVP - Weeks 1-8)
+
+#### Core Features
+1. **GitHub Repo Ingestion**
+   - Clone public GitHub repos
+   - Filter code files (.py, .js, .ts, .java)
+   - Language-aware chunking (512 tokens, 50 overlap)
+   - Skip dependencies (node_modules, .git, __pycache__)
+
+2. **Hybrid Code Search**
+   - Dense vector search (semantic)
+   - Sparse BM25 search (keyword)
+   - Reciprocal Rank Fusion merging
+   - Top-10 relevant chunks returned
+
+3. **Natural Language Q&A**
+   - Chat interface (question input)
+   - RAG pipeline (embed → search → generate)
+   - Groq LLM for answer generation
+   - Strict prompt to prevent hallucinations
+
+4. **Answer Presentation**
+   - Answer text with markdown formatting
+   - Code snippet viewer (syntax highlighting)
+   - File path + line number citations
+   - Dependency impact warnings
+
+5. **Code Viewer**
+   - Monaco Editor (VS Code engine)
+   - Syntax highlighting for Python, JS, TS, Java
+   - Line number display
+   - File tree navigation
+
+6. **Ingestion Management**
+   - GitHub URL input form
+   - Branch selector
+   - Progress bar during indexing
+   - Status polling
+
+### Out of Scope (Future Versions)
+
+1. **Authentication & Multi-tenancy** (v2)
+   - User accounts, login
+   - Per-user code repositories
+   - Team workspaces
+
+2. **Real-time Sync** (v2)
+   - Auto-re-index on code changes
+   - Webhook support for GitHub
+
+3. **Expanded Language Support** (v2)
+   - Java, Go, Rust, C++, SQL
+   - Configuration files (YAML, JSON, Terraform)
+
+4. **Advanced Analytics** (v2)
+   - Query insights, popular questions
+   - Codebase health metrics
+   - Complexity analysis
+
+5. **Private Repositories** (v2)
+   - OAuth + GitHub token support
+   - Enterprise security
+
+6. **IDE Integration** (v2)
+   - VS Code extension
+   - JetBrains plugin
+
+### Assumptions
+
+- Users have public GitHub repos
+- Repos are <500MB and <5000 files (free tier limits)
+- Questions are in English
+- Developers have basic programming knowledge
+- No authentication needed for MVP (public demo)
+
+---
+
+## DETAILED REQUIREMENTS
+
+### Functional Requirements
+
+#### FR-1: Repository Ingestion
+
+**Description:** System can ingest code from GitHub repositories and prepare for search.
+
+**Requirements:**
+- FR-1.1: Accept public GitHub repository URLs (format: https://github.com/owner/repo)
+- FR-1.2: Support main and develop branches (user-selectable)
+- FR-1.3: Clone repository securely to temporary storage
+- FR-1.4: Filter files by extension (.py, .js, .ts, .java)
+- FR-1.5: Exclude directories (node_modules, .git, __pycache__, dist, build, vendor)
+- FR-1.6: Skip files >100KB
+- FR-1.7: Process max 5000 files per repo
+- FR-1.8: Clean up temporary files after processing
+- FR-1.9: Track ingestion progress (files indexed, chunks created)
+- FR-1.10: Handle errors gracefully (invalid URL, connection timeout, permission denied)
+
+**Acceptance Criteria:**
+- ✓ Can ingest a 1000-file Python repository in <10 minutes
+- ✓ Progress endpoint shows accurate file count and status
+- ✓ Temporary files deleted after completion
+- ✓ Error messages are user-friendly and actionable
+
+---
+
+#### FR-2: Language-Aware Code Chunking
+
+**Description:** Code is split intelligently, respecting language structure (functions, classes).
+
+**Requirements:**
+- FR-2.1: Detect language from file extension
+- FR-2.2: Use language-specific separators (Python: \nclass, \ndef; JS: \nfunction, \nconst, etc.)
+- FR-2.3: Target chunk size of 512 tokens with 50-token overlap
+- FR-2.4: Preserve complete function/class definitions (don't split mid-function)
+- FR-2.5: Extract line numbers for each chunk (start_line, end_line)
+- FR-2.6: Extract function names from code
+- FR-2.7: Skip chunks <100 tokens
+- FR-2.8: Handle edge cases (multi-line strings, comments)
+
+**Acceptance Criteria:**
+- ✓ No function splits mid-definition
+- ✓ Line numbers are accurate (±1 line)
+- ✓ Chunks average 400-512 tokens
+- ✓ Function names correctly extracted for 95%+ of Python functions
+
+---
+
+#### FR-3: Embedding Generation
+
+**Description:** Code chunks are converted to vector embeddings for semantic search.
+
+**Requirements:**
+- FR-3.1: Use sentence-transformers/all-MiniLM-L6-v2 model
+- FR-3.2: Generate 384-dimensional dense vectors
+- FR-3.3: Batch process chunks (16 per batch for efficiency)
+- FR-3.4: Cache embeddings to avoid regeneration
+- FR-3.5: Handle HuggingFace API rate limits (retry with backoff)
+- FR-3.6: Timeout: 30 seconds per batch
+- FR-3.7: Track embedding generation metrics
+
+**Acceptance Criteria:**
+- ✓ All 1500+ chunks from test repo have embeddings
+- ✓ Embedding dimensions are exactly 384
+- ✓ Duplicate chunks return cached embeddings (no API call)
+- ✓ Batch processing reduces API calls by 16x vs single requests
+
+---
+
+#### FR-4: Qdrant Vector Database Integration
+
+**Description:** Code chunks with embeddings are stored in Qdrant Cloud for retrieval.
+
+**Requirements:**
+- FR-4.1: Create Qdrant collection with dense vectors (384 dims, COSINE distance)
+- FR-4.2: Create sparse vectors with BM25 weighting (IDF modifier)
+- FR-4.3: Store payload metadata: file_path, start_line, end_line, language, function_name, code_content, dependencies
+- FR-4.4: Support upsert (update existing chunks)
+- FR-4.5: Handle connection errors gracefully
+- FR-4.6: Implement connection pooling
+- FR-4.7: Monitor collection size (warn at 80% of 1GB limit)
+
+**Acceptance Criteria:**
+- ✓ 1500 chunks stored with metadata in Qdrant
+- ✓ Connection errors logged and retried
+- ✓ Can verify chunks in Qdrant dashboard
+- ✓ Collection stays under 1GB limit
+
+---
+
+#### FR-5: Hybrid Search
+
+**Description:** Search combines semantic understanding with keyword matching using Reciprocal Rank Fusion.
+
+**Requirements:**
+- FR-5.1: Convert user question to embedding
+- FR-5.2: Execute dense vector search (top-10 results)
+- FR-5.3: Execute sparse BM25 search (top-10 results)
+- FR-5.4: Merge results using Reciprocal Rank Fusion (k=60)
+- FR-5.5: Return top-10 ranked results
+- FR-5.6: Include RRF score and confidence for each result
+- FR-5.7: Query latency <1 second
+- FR-5.8: Handle empty result sets gracefully
+
+**Acceptance Criteria:**
+- ✓ Hybrid search outperforms dense-only on exact terms (e.g., "Error 503")
+- ✓ Hybrid search outperforms sparse-only on synonyms (e.g., "login" vs "authentication")
+- ✓ Query latency <1 second for 1500-chunk collection
+- ✓ No results returns helpful "not found" message
+
+---
+
+#### FR-6: LLM-Based Answer Generation
+
+**Description:** Retrieved code chunks are sent to Groq LLM to generate natural language answers.
+
+**Requirements:**
+- FR-6.1: Format code context into readable markdown
+- FR-6.2: Use strict prompt template to prevent hallucinations
+- FR-6.3: Enforce citations (file path + line numbers)
+- FR-6.4: Limit answer length to 300 words
+- FR-6.5: Include code snippets (max 10 lines each) in answer
+- FR-6.6: Use Groq llama-3.1-70b-versatile model
+- FR-6.7: Temperature set to 0.3 (deterministic)
+- FR-6.8: Timeout: 30 seconds
+- FR-6.9: Retry failed LLM calls up to 3 times
+
+**Acceptance Criteria:**
+- ✓ 95%+ of answers include valid file citations
+- ✓ No made-up code or functions in answers
+- ✓ Code snippets are accurate (copy-paste from source)
+- ✓ LLM errors are logged with context
+
+---
+
+#### FR-7: Citation Extraction
+
+**Description:** File paths and line numbers are automatically extracted from LLM responses and linked.
+
+**Requirements:**
+- FR-7.1: Extract file paths using regex pattern `/path/to/file.py`
+- FR-7.2: Extract line ranges: `(lines 45-78)` or `(line 45)`
+- FR-7.3: Validate citations against retrieved chunks
+- FR-7.4: Return structured citation data
+- FR-7.5: Handle malformed citations gracefully
+- FR-7.6: Calculate confidence score (% of answer text that's cited)
+
+**Acceptance Criteria:**
+- ✓ 90%+ of citations are valid and found in source
+- ✓ Line numbers match actual code locations (±1 line acceptable)
+- ✓ Answer has >80% citation coverage
+
+---
+
+#### FR-8: Dependency Tracking
+
+**Description:** System tracks which files depend on which, enabling impact analysis.
+
+**Requirements:**
+- FR-8.1: Parse Python imports (import x, from x import y)
+- FR-8.2: Parse JavaScript imports (import x from 'y', require('z'))
+- FR-8.3: Extract function calls and their definitions
+- FR-8.4: Build dependency graph during ingestion
+- FR-8.5: Store dependencies in chunk metadata
+- FR-8.6: Support transitive dependency resolution (A→B→C)
+- FR-8.7: Timeout: <1 second per dependency query
+
+**Acceptance Criteria:**
+- ✓ Can identify all direct dependencies of a function
+- ✓ Can identify files affected by changing a specific function
+- ✓ Transitive dependencies correctly resolved
+- ✓ Dependency endpoint returns results in <1 second
+
+---
+
+#### FR-9: Web UI - Chat Interface
+
+**Description:** Users interact with the system through a chat-like interface.
+
+**Requirements:**
+- FR-9.1: Input field for questions (max 500 chars)
+- FR-9.2: Message history display
+- FR-9.3: Distinguish user questions vs assistant answers (visual separation)
+- FR-9.4: Show loading indicator during API calls
+- FR-9.5: Display error messages if query fails
+- FR-9.6: Responsive design (mobile, tablet, desktop)
+- FR-9.7: Copy-to-clipboard for code snippets
+- FR-9.8: Clickable file path links (open code viewer)
+- FR-9.9: Clear chat history button
+
+**Acceptance Criteria:**
+- ✓ Message display is clear and readable
+- ✓ Loading states indicate progress
+- ✓ Works on mobile (portrait + landscape)
+- ✓ Accessibility: keyboard navigation, ARIA labels
+
+---
+
+#### FR-10: Web UI - Code Viewer
+
+**Description:** Display code snippets with syntax highlighting and navigation.
+
+**Requirements:**
+- FR-10.1: Show code in Monaco Editor (VS Code engine)
+- FR-10.2: Syntax highlighting for Python, JavaScript, TypeScript, Java
+- FR-10.3: Display file path, start line, end line
+- FR-10.4: Show line numbers
+- FR-10.5: Read-only mode (no editing)
+- FR-10.6: Highlight specific line ranges (optional)
+- FR-10.7: Handle code blocks up to 100 lines
+- FR-10.8: Mobile-responsive (horizontal scroll for large blocks)
+
+**Acceptance Criteria:**
+- ✓ Code renders with correct syntax colors
+- ✓ Line numbers are accurate
+- ✓ Monaco editor loads without lag
+- ✓ Works on mobile with scroll
+
+---
+
+#### FR-11: Repo Input & Ingestion Progress
+
+**Description:** Users can input GitHub URLs and monitor ingestion progress.
+
+**Requirements:**
+- FR-11.1: GitHub URL input field with validation
+- FR-11.2: Branch selector dropdown (defaults: main, develop)
+- FR-11.3: Start ingestion button
+- FR-11.4: Progress bar with percentage
+- FR-11.5: Detailed progress: "Indexed 45 of 234 files"
+- FR-11.6: Chunk count display
+- FR-11.7: Estimated time remaining
+- FR-11.8: Cancel button during ingestion
+- FR-11.9: Success message + stats on completion
+- FR-11.10: Error alert with retry option
+
+**Acceptance Criteria:**
+- ✓ URL validation prevents invalid inputs
+- ✓ Progress updates every 2 seconds
+- ✓ Final stats match actual indexed data
+- ✓ Can cancel mid-ingestion without data corruption
+
+---
+
+#### FR-12: API Endpoints
+
+**Description:** Backend exposes RESTful API for frontend and external integrations.
+
+**Endpoints:**
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/ingest` | POST | Start repository ingestion |
+| `/api/ingest/status/{job_id}` | GET | Poll ingestion progress |
+| `/api/query` | POST | Submit question, get answer |
+| `/api/dependencies` | GET | Get dependency impact analysis |
+| `/api/health` | GET | Service health check |
+
+**Acceptance Criteria:**
+- ✓ All endpoints return valid JSON responses
+- ✓ Proper HTTP status codes (200, 202, 400, 404, 503)
+- ✓ CORS enabled for frontend domain
+- ✓ Error responses include helpful messages
+
+---
+
+### Non-Functional Requirements
+
+#### NFR-1: Performance
+
+| Metric | Target | Rationale |
+|--------|--------|-----------|
+| Query response time | <3 seconds | User satisfaction (most users accept <3 sec) |
+| Search latency | <1 second | Core search operation |
+| Embedding generation | <500ms per chunk | Don't block user |
+| Frontend load time | <2 seconds | First paint |
+| Code viewer render | <1 second | Smooth UX |
+
+**Acceptance Criteria:**
+- ✓ Query response time <3 sec after warm-up
+- ✓ First request may take 30-50 sec due to Render cold start (acceptable)
+- ✓ 95th percentile latency <4 seconds
+
+---
+
+#### NFR-2: Reliability
+
+| Metric | Target | Rationale |
+|--------|--------|-----------|
+| Uptime (MVP) | 95% | Portfolio project, not production SLA |
+| Error recovery | Automatic retry | Don't fail on transient errors |
+| Data durability | No data loss | Qdrant backups, permanent storage |
+| Cache hit rate | >80% | Reduce API calls |
+
+**Acceptance Criteria:**
+- ✓ API errors trigger automatic retry (3 attempts)
+- ✓ Chunks persisted in Qdrant after ingestion
+- ✓ Failed ingestions logged with root cause
+
+---
+
+#### NFR-3: Scalability
+
+| Limit | Specification | Reason |
+|-------|---------------|--------|
+| Max repo size | 500MB | Free tier limitation |
+| Max files | 5000 | Qdrant free tier (1GB) = ~15K chunks |
+| Max chunks | 15000 | Qdrant storage limit |
+| Concurrent users | 5-10 (MVP) | Render free tier, Groq rate limit |
+| Query rate | 30/min | Groq API free tier limit |
+
+**Acceptance Criteria:**
+- ✓ System gracefully handles at limits (informative error message)
+- ✓ Can index 5K-file repo without errors
+- ✓ Request queue if rate limit exceeded (don't drop requests)
+
+---
+
+#### NFR-4: Security
+
+| Requirement | Specification |
+|-------------|---------------|
+| No authentication (MVP) | Public repos only, no user accounts |
+| API keys | Stored in environment variables (not in code) |
+| HTTPS | All API calls over HTTPS |
+| Input validation | Sanitize all user inputs |
+| CORS | Only allow frontend domain |
+| GitHub token | Optional, for higher rate limits on public repos |
+
+**Acceptance Criteria:**
+- ✓ No secrets in code (use .env files)
+- ✓ All external API calls over HTTPS
+- ✓ Invalid inputs rejected with 400 Bad Request
+- ✓ CORS headers present in responses
+
+---
+
+#### NFR-5: Usability
+
+| Requirement | Specification |
+|-------------|---------------|
+| Onboarding | First question asked in <2 minutes |
+| Mobile responsive | Works on iPhone, Android, iPad |
+| Dark mode (optional) | Accessible in light + dark themes |
+| Accessibility | WCAG 2.1 AA compliance |
+| Error messages | User-friendly, actionable guidance |
+
+**Acceptance Criteria:**
+- ✓ New users can ask a question without tutorial
+- ✓ No layout issues on mobile
+- ✓ Keyboard navigation works (Tab, Enter, Escape)
+- ✓ Error messages explain what went wrong + how to fix
+
+---
+
+#### NFR-6: Maintainability
+
+| Requirement | Specification |
+|-------------|---------------|
+| Code quality | Type hints, docstrings, <20 line functions |
+| Test coverage | >70% for critical paths |
+| Logging | DEBUG, INFO, WARNING, ERROR levels |
+| Documentation | README + API docs + code comments |
+| Dependency management | Pinned versions, minimal external deps |
+
+**Acceptance Criteria:**
+- ✓ TypeScript strict mode, Python type hints
+- ✓ Critical paths (ingestion, search, generation) have tests
+- ✓ README explains architecture + setup
+- ✓ API endpoints documented with curl examples
+
+---
+
+#### NFR-7: Cost Efficiency
+
+| Component | Cost | Limit |
+|-----------|------|-------|
+| Qdrant Cloud | Free | 1GB storage |
+| Groq Cloud | Free | 30 requests/min |
+| HuggingFace | Free | Inference API, rate limited |
+| Render | Free | 750 hours/month, sleeps after 15 min inactivity |
+| Vercel | Free | Unlimited deployments, 100GB bandwidth |
+| GitHub | Free | Public repos, 60 API requests/hour unauthenticated |
+
+**Acceptance Criteria:**
+- ✓ All services on free tier
+- ✓ No unexpected charges
+- ✓ Cost monitoring in place (alert at 80% of limits)
+
+---
+
+## USER STORIES & USE CASES
+
+### Use Case 1: Junior Developer Onboarding
+
+**Actor:** Alex (1-year experience, new hire)
+
+**Scenario:**
+1. Alex joins company with 5K-file Python/JavaScript codebase
+2. Opens CodeMind, pastes GitHub repo URL
+3. Waits for indexing (~8 minutes)
+4. Asks: "How does the payment processing work?"
+5. Gets answer with 3 linked files (payment.py, stripe_api.py, webhooks.py)
+6. Clicks each file to read code examples
+7. Asks follow-up: "What happens if a webhook fails?"
+8. Gets answer citing retry logic in webhooks.py
+
+**Expected Outcome:** Alex understands payment flow in 30 minutes instead of asking seniors repeatedly.
+
+**Success Criteria:**
+- ✓ Answers are accurate (no hallucinations)
+- ✓ File citations are correct
+- ✓ Alex can navigate from answer to code
+- ✓ Follow-up questions work without re-ingestion
+
+---
+
+### Use Case 2: Refactoring with Impact Analysis
+
+**Actor:** Sam (Senior Engineer, refactoring authentication)
+
+**Scenario:**
+1. Sam wants to rename `validate_user()` function in auth.py
+2. Asks CodeMind: "If I rename validate_user, what breaks?"
+3. Gets list of 7 affected files with dependency chain:
+   - login.py calls validate_user directly (5 calls)
+   - api/admin.py imports from login.py (3 calls)
+   - webhooks.py calls admin.py indirectly
+4. Sam uses this info to create refactoring plan
+5. Updates all 7 files confidently
+
+**Expected Outcome:** Sam refactors safely with full impact awareness.
+
+**Success Criteria:**
+- ✓ Dependency analysis is accurate
+- ✓ No missed dependencies
+- ✓ Transitive dependencies shown
+- ✓ Sam feels confident making changes
+
+---
+
+### Use Case 3: Open-Source Documentation
+
+**Actor:** Jordan (OSS maintainer)
+
+**Scenario:**
+1. New contributor asks: "How do I add a new authentication provider?"
+2. Jordan pastes CodeMind link
+3. Contributor asks: "How does the provider interface work?"
+4. Gets answer with code examples from auth_base.py and implementations
+5. Contributor can implement independently
+
+**Expected Outcome:** Fewer support questions, faster contributor onboarding.
+
+**Success Criteria:**
+- ✓ Answers guide contributor to right files
+- ✓ Examples are correct and copy-paste ready
+- ✓ Contributor feels empowered
+
+---
+
+### Use Case 4: Portfolio Interview Question
+
+**Actor:** Casey (CS student, job interview)
+
+**Scenario:**
+1. Interviewer: "Tell us about a complex system you've built"
+2. Casey: "I built CodeMind RAG, a code search engine..."
+3. Casey explains RAG architecture (retrieval + generation)
+4. Casey explains hybrid search (dense vectors + BM25)
+5. Discusses challenges solved (chunking, hallucination prevention, citations)
+6. Shows live demo with their own repo
+7. Interviewer impressed with depth of understanding
+
+**Expected Outcome:** Casey gets job offer, demonstrates senior-level system design.
+
+**Success Criteria:**
+- ✓ System is technically sound and impressive
+- ✓ Code is production-quality
+- ✓ Candidates can explain architecture deeply
+- ✓ Live demo works smoothly
+
+---
+
+## DATA REQUIREMENTS
+
+### Data Models
+
+#### Code Chunk (Stored in Qdrant)
+
+```json
+{
+    "id": "uuid-123-abc",
+    "file_path": "src/auth/login.py",
+    "start_line": 45,
+    "end_line": 78,
+    "language": "python",
+    "function_name": "validate_user",
+    "code_content": "def validate_user(username, password):\n    hash = bcrypt.hash(...)",
+    "repo_name": "user/my-project",
+    "dependencies": [
+        "src/api/users.py",
+        "src/middleware/auth.py"
+    ],
+    "external_dependencies": [
+        "bcrypt",
+        "sqlalchemy"
+    ],
+    "last_updated": "2026-04-04T10:00:00Z",
+    "chunk_size_tokens": 512,
+    "vector_dense": [0.123, 0.456, ...],  // 384 dims
+    "vector_sparse": {                     // BM25 weights
+        "def": 2.5,
+        "validate": 1.8,
+        "user": 1.2,
+        ...
+    }
+}
+```
+
+#### Query Request
+
+```json
+{
+    "question": "How does user authentication work?",
+    "repo_name": "user/my-project",
+    "top_k": 10
+}
+```
+
+#### Query Response
+
+```json
+{
+    "question": "How does user authentication work?",
+    "answer": "User authentication happens in 3 places...",
+    "sources": [
+        {
+            "file_path": "src/auth/login.py",
+            "start_line": 45,
+            "end_line": 78,
+            "language": "python",
+            "snippet": "def validate_user(username, password):",
+            "rrf_score": 0.92
+        }
+    ],
+    "confidence_score": 0.89,
+    "query_time_ms": 2345,
+    "tokens_used": {
+        "question_embedding": 12,
+        "llm_input": 342,
+        "llm_output": 156
+    }
+}
+```
+
+### Data Storage
+
+| Data | Storage | Retention | Backup |
+|------|---------|-----------|--------|
+| Code chunks + embeddings | Qdrant Cloud | Until re-ingestion | Qdrant auto-backup |
+| Ingestion jobs | In-memory (MVP) | 24 hours | None (lose on restart) |
+| Query metrics | None (MVP) | - | - |
+| Code from GitHub | Temp storage | During ingestion | Auto-delete |
+
+---
+
+## SUCCESS METRICS & KPIs
+
+### Functional Metrics
+
+| Metric | Target | How Measured |
+|--------|--------|--------------|
+| Answer Accuracy | 80%+ correct file citations | Manual review of 100 queries |
+| Citation Coverage | >80% of answer text cited | Regex extraction + validation |
+| Latency (p95) | <4 seconds | CloudWatch / timing logs |
+| Search Quality | Hybrid better than dense-only | Benchmark on 50+ queries |
+
+### User Metrics
+
+| Metric | Target | How Measured |
+|--------|--------|--------------|
+| Time to first query | <2 minutes | User testing |
+| User satisfaction | >4/5 stars | In-app survey (future) |
+| Onboarding speed | 50% faster (vs manual) | Estimate from use cases |
+| Question clarity | 90%+ understood correctly | LLM interpretation |
+
+### Technical Metrics
+
+| Metric | Target | How Measured |
+|--------|--------|--------------|
+| Uptime | 95% | Uptime Robot monitoring |
+| Error rate | <1% | API error logs |
+| Cache hit rate | >80% | Redis / in-memory cache stats |
+| Ingestion success rate | >95% | Job tracking in backend |
+
+### Portfolio Metrics
+
+| Metric | Target | How Measured |
+|--------|--------|--------------|
+| GitHub stars | 100+ by month 3 | GitHub analytics |
+| Demo video views | 500+ | YouTube analytics |
+| LinkedIn engagement | 50+ shares | LinkedIn tracking |
+| Interview success | Positive feedback | Candidate feedback |
+
+---
+
+## ACCEPTANCE CRITERIA
+
+### Phase 1 Acceptance (Ingestion Complete)
+
+- ✓ Backend can clone public GitHub repos
+- ✓ Code files (.py, .js, .ts, .java) correctly identified
+- ✓ Language-aware chunking respects function boundaries
+- ✓ 1500+ chunks generated, embedded, and stored in Qdrant
+- ✓ No code in sensitive directories (node_modules, .git)
+- ✓ Ingestion progress endpoint working
+- ✓ Test with 3 different repos (Python, JS, mixed)
+
+### Phase 2 Acceptance (Search & Query Complete)
+
+- ✓ Hybrid search returns top-10 relevant chunks
+- ✓ Hybrid outperforms dense-only on exact terms
+- ✓ LLM generates answers citing file paths + line numbers
+- ✓ Citation accuracy >90%
+- ✓ No hallucinated functions or code
+- ✓ Query latency <3 seconds
+- ✓ Test with 50+ sample questions
+
+### Phase 3 Acceptance (Frontend Complete)
+
+- ✓ Chat interface allows question input
+- ✓ Answers display with syntax-highlighted code
+- ✓ File paths are clickable, open code viewer
+- ✓ Mobile responsive (iPhone 12+, Android)
+- ✓ Keyboard navigation works (Tab, Enter)
+- ✓ Loading states and error messages display
+- ✓ Can ingest repo and ask questions end-to-end
+
+### Phase 4 Acceptance (Deployment Complete)
+
+- ✓ Backend deployed to Render, stable uptime
+- ✓ Frontend deployed to Vercel, live at URL
+- ✓ GitHub Actions CI/CD working
+- ✓ API health check endpoint responding
+- ✓ README with setup instructions + architecture diagram
+- ✓ 3-minute demo video recorded
+- ✓ Can handle 5000-file repo ingestion
+- ✓ Dependency analyzer working (bonus)
+
+---
+
+## CONSTRAINTS & LIMITATIONS
+
+### Technical Constraints
+
+| Constraint | Impact | Mitigation |
+|------------|--------|------------|
+| Qdrant 1GB free limit | ~15K chunks (5K files) | Use small-medium repos for demo |
+| Render cold starts | 30-50 sec first request | UptimeRobot pings every 10 min |
+| Groq 30 req/min limit | Can't handle >5 concurrent users | Queue requests, show "Processing..." |
+| No authentication | Anyone can use app | Fine for portfolio, add auth in v2 |
+| Python + JS only (MVP) | Missing Java, Go, etc. | Expand language support in v2 |
+
+### Business Constraints
+
+| Constraint | Impact | Mitigation |
+|------------|--------|------------|
+| $0 budget | Must use free tiers only | All services support free tier |
+| 6-8 week timeline | MVP scope only | Cut auth, real-time sync, advanced analytics |
+| Single developer | Can't do everything | Focus on MVP first, polish later |
+| Public repos only | Can't index private code | OK for portfolio, add OAuth in v2 |
+
+---
+
+## ROADMAP
+
+### MVP (Weeks 1-8)
+
+**Goal:** Working prototype deployed and demoed
+
+**Deliverables:**
+- Backend: Ingestion, search, query endpoints
+- Frontend: Chat UI, code viewer
+- Deployment: Render + Vercel
+- Documentation: README + API docs
+- Demo video
+
+**Success:** Can index GitHub repo, ask questions, get answers with citations
+
+---
+
+### V1.1 (Month 2-3, Optional)
+
+**Goal:** Production polish, analytics, performance
+
+**Features:**
+- Query analytics (popular questions, accuracy tracking)
+- Performance optimization (caching, query batching)
+- Error monitoring (Sentry / Better Stack)
+- README improvements, demo video v2
+- Support for Java, Go (additional languages)
+
+---
+
+### V2 (Month 4+, Future)
+
+**Goal:** Enterprise-ready, multi-user platform
+
+**Features:**
+- User authentication (GitHub OAuth)
+- Team workspaces, private repos
+- Real-time sync (webhooks, auto-reindex)
+- Advanced analytics (codebase health, complexity)
+- IDE plugins (VS Code, JetBrains)
+- Paid tier option
+
+---
+
+## DESIGN & USER EXPERIENCE
+
+### User Interface Overview
+
+```
+┌─────────────────────────────────────────────────────┐
+│  CodeMind RAG                              [Help]   │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Chat Interface (Left 60%)                          │
+│  ┌──────────────────────────────────────────────┐   │
+│  │ Q: How does payment validation work?         │   │
+│  │ A: Payment validation happens in 3 places:   │   │
+│  │   1. /src/payment/validators.py (lines...)  │   │
+│  │   2. /src/api/checkout.py (lines...)        │   │
+│  │ ✓ 89% confidence                            │   │
+│  │                                              │   │
+│  │ [Type question...            ] [Send]       │   │
+│  └──────────────────────────────────────────────┘   │
+│                                                     │
+├──────────────┬──────────────────────────────────────┤
+│              │ Code Viewer (Right 40%)              │
+│              │ ┌──────────────────────────────────┐ │
+│ File Tree    │ /src/payment/validators.py         │ │
+│              │ (lines 45-78)                      │ │
+│ 📁 src/      │                                    │ │
+│  📁 payment  │ def validate_payment(...):         │ │
+│   📄 api.py  │     if amount <= 0:                │ │
+│   📄 models  │         raise ValueError()         │ │
+│   📄 valid..│     # Process payment...           │ │
+│  📁 routes   │     return True                    │ │
+│              │ [Copy]                             │ │
+│              │ ┌──────────────────────────────────┐ │
+└──────────────┴──────────────────────────────────────┘
+```
+
+### User Workflow Diagram
+
+```
+New User
+   │
+   ├─ Enter GitHub URL
+   │  │
+   │  ├─ See ingestion progress
+   │  │  (45/234 files indexed, 345 chunks)
+   │  │
+   │  └─ "Indexing complete!"
+   │
+   ├─ Ask question
+   │  │
+   │  ├─ See loading spinner (2-3 sec)
+   │  │
+   │  └─ View answer with citations
+   │
+   ├─ Click file path
+   │  │
+   │  └─ See code snippet in viewer
+   │
+   └─ Ask follow-up question
+```
+
+---
+
+## RISKS & MITIGATION
+
+### Technical Risks
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|-----------|
+| LLM hallucination | Wrong answers hurt credibility | Medium | Strict prompt + citation validation |
+| Chunking loses context | Bad search results | Medium | Language-aware splitting, overlap |
+| Embedding quality | Semantic search misses relevant code | Low | Use pre-trained model, test heavily |
+| Qdrant performance | Slow queries on large collections | Low | Hybrid search, careful tuning |
+| Cold starts on Render | First request slow | High | UptimeRobot pings, document limitation |
+
+### Business Risks
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|-----------|
+| Low adoption | Project sits unused | Medium | Strong marketing, good README, demo |
+| API changes | Integration breaks | Low | Monitor free tier terms, use stable APIs |
+| Free tier removed | Loss of service | Very Low | Enterprise products unlikely to drop free tier |
+| GitHub rate limits | Ingestion fails | Low | Use GitHub token, cache responses |
+
+### Project Risks
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|-----------|
+| Timeline slips | Beyond 8 weeks | Medium | Scope cuts, daily progress tracking |
+| Scope creep | Features pile up | High | Strict MVP definition, v2 backlog |
+| Code quality suffers | Maintenance nightmare | Medium | Code review, tests, documentation |
+
+---
+
+## GLOSSARY
+
+| Term | Definition |
+|------|-----------|
+| **RAG** | Retrieval-Augmented Generation - fetch relevant context, send to LLM for answer |
+| **Hybrid Search** | Combines semantic (vector) + keyword (BM25) search |
+| **RRF** | Reciprocal Rank Fusion - algorithm to merge ranked lists |
+| **Dense Vectors** | 384-dimensional embeddings from sentence-transformers model |
+| **Sparse Vectors** | BM25 weighted keyword scores (high for rare words) |
+| **LLM** | Large Language Model (Groq llama-3.1-70b-versatile) |
+| **Chunking** | Splitting code into 512-token pieces |
+| **Embedding** | Vector representation of text (captures meaning) |
+| **Citation** | File path + line numbers proving answer is from code |
+| **Dependency** | When one file imports or calls another |
+| **Transitive Dependency** | Indirect dependency (A→B→C means A depends on C indirectly) |
+
+---
+
+## APPENDIX: TECHNICAL SPECIFICATIONS
+
+### Technology Stack
+
+**Frontend:**
+- Framework: Next.js 14 (App Router)
+- Language: TypeScript
+- Styling: Tailwind CSS
+- UI Components: Shadcn/ui
+- Code Editor: Monaco Editor
+- Syntax Highlighting: Prism.js
+- Hosting: Vercel
+
+**Backend:**
+- Framework: FastAPI (Python 3.11+)
+- Async: AsyncIO
+- Hosting: Render (free tier)
+- Task Queue: FastAPI background tasks
+
+**AI/ML:**
+- Vector DB: Qdrant Cloud
+- LLM: Groq Cloud (llama-3.1-70b-versatile)
+- Embeddings: sentence-transformers/all-MiniLM-L6-v2
+- RAG Framework: LangChain / LlamaIndex
+
+**DevOps:**
+- Version Control: GitHub
+- CI/CD: GitHub Actions
+- Containerization: Docker
+- Monitoring: Better Stack (free logging)
+
+### Environment Variables
+
+**Backend:**
+```
+QDRANT_URL=https://your-cluster.qdrant.tech
+QDRANT_API_KEY=your-qdrant-api-key
+GROQ_API_KEY=your-groq-api-key
+HUGGINGFACE_API_KEY=your-hf-token
+GITHUB_TOKEN=your-github-token
+LOG_LEVEL=INFO
+```
+
+**Frontend:**
+```
+NEXT_PUBLIC_BACKEND_URL=https://your-backend.onrender.com
+NEXT_PUBLIC_MAX_QUERY_LENGTH=500
+```
+
+---
+
+## APPROVAL & SIGN-OFF
+
+| Role | Name | Date | Signature |
+|------|------|------|-----------|
+| Product Owner | [Name] | 2026-04-04 | _____ |
+| Tech Lead | [Name] | 2026-04-04 | _____ |
+| Designer | [Name] | 2026-04-04 | _____ |
+
+---
+
+**Document Status:** Ready for Development  
+**Next Review Date:** End of Week 4 (check progress)  
+**Version History:** v1.0 (Initial)
+
+---
+
+*This PRD is a living document and will be updated as development progresses. Last modified: April 4, 2026.*
