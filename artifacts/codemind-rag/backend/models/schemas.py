@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 
 class IngestRequest(BaseModel):
@@ -33,13 +33,27 @@ class IngestResponse(BaseModel):
     message: str
 
 
+class CodeChunk(BaseModel):
+    file_path: str
+    start_line: int
+    end_line: int
+    language: str
+    content: str
+    function_name: Optional[str] = None
+    dependencies: List[str] = []
+    char_count: int
+    token_count: int
+
+
 class IngestionStatus(BaseModel):
     job_id: str
     status: str
     files_indexed: int
     chunks_created: int
+    total_chunks: int = 0
     error: Optional[str] = None
     progress_percent: int
+    chunks: List[CodeChunk] = []
 
 
 class HealthResponse(BaseModel):

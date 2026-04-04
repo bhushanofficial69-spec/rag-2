@@ -2,13 +2,15 @@ import uuid
 import shutil
 import os
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 from concurrent.futures import ThreadPoolExecutor
 
 from config import settings
-from models.schemas import IngestionStatus
+from models.schemas import IngestionStatus, CodeChunk
 from services.repo_cloner import RepoCloner
 from services.file_filter import FileFilter
+from services.chunking import chunking_service
+from services.language_parser import language_parser
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -30,6 +32,7 @@ class IngestionService:
             status="queued",
             files_indexed=0,
             chunks_created=0,
+            total_chunks=0,
             progress_percent=0,
         )
         _executor.submit(self._run_ingestion, job_id, repo_url, branch)
@@ -51,44 +54,66 @@ class IngestionService:
 
             if len(code_files) > settings.MAX_FILES:
                 raise ValueError(
-                    f"Repository has {len(code_files)} files, exceeding limit of {settings.MAX_FILES}. "
-                    "Try a smaller repository."
+                    f"Repository has {len(code_files)} files, exceeding limit of {settings.MAX_FILES}."
                 )
 
-            logger.info(
-                "files_found",
-                job_id=job_id,
-                count=len(code_files),
-                repo_url=repo_url,
-            )
-            self._update_job(job_id, progress_percent=50, files_indexed=len(code_files))
+            total_files = len(code_files)
+            logger.info("files_found", job_id=job_id, count=total_files, repo_url=repo_url)
+            self._update_job(job_id, progress_percent=40, files_indexed=total_files)
 
-            total = len(code_files)
+            all_chunks: List[CodeChunk] = []
+
             for idx, fpath in enumerate(code_files):
                 try:
                     content = Path(fpath).read_text(encoding="utf-8", errors="ignore")
                     language = self.filter.detect_language(fpath)
+
+                    chunks = chunking_service.chunk_code(content, language, fpath)
+
+                    deps = language_parser.extract_dependencies(content, language, fpath)
+                    for chunk in chunks:
+                        chunk.dependencies = deps
+
+                    all_chunks.extend(chunks)
+
                     logger.debug(
-                        "file_read",
+                        "file_processed",
                         job_id=job_id,
                         file=fpath,
                         language=language,
-                        chars=len(content),
+                        chunks=len(chunks),
                     )
                 except Exception as exc:
-                    logger.warning("file_read_error", job_id=job_id, file=fpath, error=str(exc))
+                    logger.warning(
+                        "file_processing_error",
+                        job_id=job_id,
+                        file=fpath,
+                        error=str(exc),
+                    )
 
-                progress = 50 + int((idx + 1) / max(total, 1) * 45)
-                self._update_job(job_id, progress_percent=progress)
+                progress = 40 + int((idx + 1) / max(total_files, 1) * 55)
+                self._update_job(
+                    job_id,
+                    progress_percent=progress,
+                    chunks_created=len(all_chunks),
+                    total_chunks=len(all_chunks),
+                )
 
             self._update_job(
                 job_id,
                 status="completed",
                 progress_percent=100,
-                files_indexed=total,
-                chunks_created=0,
+                files_indexed=total_files,
+                chunks_created=len(all_chunks),
+                total_chunks=len(all_chunks),
+                chunks=all_chunks,
             )
-            logger.info("ingestion_complete", job_id=job_id, files=total)
+            logger.info(
+                "ingestion_complete",
+                job_id=job_id,
+                files=total_files,
+                chunks=len(all_chunks),
+            )
 
         except Exception as exc:
             logger.error("ingestion_failed", job_id=job_id, error=str(exc))

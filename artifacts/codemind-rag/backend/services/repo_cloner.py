@@ -54,6 +54,11 @@ class RepoCloner:
         result: dict = {"repo": None, "error": None}
         completed = threading.Event()
 
+        env = os.environ.copy()
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        env.pop("GIT_ASKPASS", None)
+        env.pop("SSH_ASKPASS", None)
+
         def _do_clone():
             try:
                 repo = git.Repo.clone_from(
@@ -61,6 +66,7 @@ class RepoCloner:
                     str(dest_path),
                     branch=branch,
                     depth=1,
+                    env=env,
                 )
                 result["repo"] = repo
             except GitCommandError as exc:

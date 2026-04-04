@@ -6,7 +6,7 @@
 |-------|-------|--------|-----------|
 | Phase 1 | Environment & Scaffolding | ✅ COMPLETE | 2026-04-04 |
 | Phase 2 | GitHub Repo Cloning & Ingestion Pipeline | ✅ COMPLETE | 2026-04-04 |
-| Phase 3 | Language-Aware Code Chunking Engine | PENDING | — |
+| Phase 3 | Language-Aware Code Chunking Engine | ✅ COMPLETE | 2026-04-04 |
 | Phase 4 | Embedding Generation & Qdrant Vector DB | PENDING | — |
 | Phase 5 | Hybrid Search (Dense + BM25 + RRF) | PENDING | — |
 | Phase 6 | Groq LLM Integration & RAG Chain | PENDING | — |
@@ -16,46 +16,88 @@
 
 ---
 
-## Phase 1 Completion Checklist ✅ COMPLETE
+## Phase 3 Completion Checklist ✅ COMPLETE
 
-- [x] Next.js 14 (v14.2.35) project created with App Router
-- [x] TypeScript strict mode enabled
-- [x] Tailwind CSS v4 configured
-- [x] All directories created: app/, components/ui/, lib/, types/, public/
-- [x] Scaffold components created: ChatInterface, CodeViewer, FileTree, RepoInput
-- [x] Shadcn/ui Button component (Radix UI + class-variance-authority)
-- [x] lib/utils.ts, lib/api.ts, lib/constants.ts, types/index.ts
-- [x] .env.example + README.md
-- [x] Dev server verified: Next.js 14.2.35 on port 23968, HTTP 200
+- [x] `services/chunking.py` — ChunkingService with 4 methods
+- [x] `detect_language()` — extension-based, returns python/javascript/typescript/java/unknown
+- [x] `get_language_separators()` — language-specific separator lists
+- [x] `chunk_code()` — RecursiveCharacterTextSplitter + line number tracking + function extraction
+- [x] `_get_line_numbers()` — sequential scan (not str.find) for accurate line tracking
+- [x] `_extract_function_name()` — AST for Python, regex for JS/TS/Java
+- [x] `services/language_parser.py` — LanguageParser with extract_dependencies()
+- [x] Python: ast.parse() for Import/ImportFrom nodes
+- [x] JavaScript/TypeScript: regex for import/require
+- [x] Java: regex for import statements
+- [x] `models/schemas.py` — CodeChunk model added, IngestionStatus extended
+- [x] `services/ingestion.py` — integrated chunking + dependency extraction
+- [x] `tests/test_chunking.py` — 12 unit tests written
+- [x] **12/12 tests pass** (pytest in 1.66s)
+- [x] tiktoken==0.5.2, langchain==0.1.0, langchain-community==0.0.10 installed
+- [x] `requirements.txt` updated
+
+**Manual test results (psf/requests):**
+- Cloned in 1.3s
+- 35 Python files found
+- **178 chunks created** (target: >100 ✓)
+- All `start_line >= 1` ✓
+- All `end_line >= start_line` ✓
+- All `token_count >= 100` ✓
 
 ---
 
-## Phase 2 Completion Checklist ✅ COMPLETE
+## Chunking Strategy
 
-- [x] FastAPI backend created at `artifacts/codemind-rag/backend/`
-- [x] Python 3.11 runtime installed
-- [x] All 10 packages installed (pinned versions)
-- [x] `config.py` — Pydantic BaseSettings (GITHUB_TOKEN, MAX_REPO_SIZE, MAX_FILES, TEMP_DIR, LOG_LEVEL)
-- [x] `models/schemas.py` — IngestRequest (with GitHub URL validation), IngestResponse, IngestionStatus, HealthResponse
-- [x] `utils/logger.py` — structlog with ConsoleRenderer (dev) / JSONRenderer (prod)
-- [x] `services/repo_cloner.py` — RepoCloner with GitPython, auth, 5-min timeout, error classification
-- [x] `services/file_filter.py` — FileFilter with extension + directory exclusion + 100KB cap
-- [x] `services/ingestion.py` — IngestionService with UUID job IDs, in-memory store, ThreadPoolExecutor
-- [x] `routers/health.py` — GET /api/health returns 200 with service statuses + uptime
-- [x] `routers/ingest.py` — POST /api/ingest (202), GET /api/ingest/status/{job_id} (200/404)
-- [x] `routers/query.py` — stub router for Phase 6
-- [x] `main.py` — FastAPI app with CORS for localhost + Replit dev domains
-- [x] `Dockerfile` + `docker-compose.yml`
-- [x] `.env.example` + `backend/README.md`
-- [x] Workflow registered: `artifacts/codemind-rag: FastAPI Backend` on port 8000
+### Separators Per Language
 
-**Verified endpoints:**
-- `GET /api/health` → 200 ✓
-- `POST /api/ingest` bad URL → 422 ✓
-- `POST /api/ingest` valid GitHub URL → 202 with job_id ✓
-- `GET /api/ingest/status/{job_id}` → 200 with IngestionStatus ✓
-- `GET /api/ingest/status/nonexistent` → 404 ✓
-- CORS preflight → `access-control-allow-origin: http://localhost:3000` ✓
+| Language | Separators (priority order) |
+|----------|----------------------------|
+| Python | `\nclass `, `\ndef `, `\nasync def `, `\n\n`, `\n`, `. `, ` ` |
+| JavaScript | `\nfunction `, `\nconst `, `\nlet `, `\nvar `, `\nclass `, `\n\n`, `\n`, `. `, ` ` |
+| TypeScript | Same as JS + `\ninterface `, `\ntype ` |
+| Java | `\npublic class `, `\nprivate class `, `\nprotected class `, `\npublic static `, `\npublic `, `\n\n`, `\n` |
+| Default | `\n\n`, `\n`, `. `, ` ` |
+
+### Chunk Parameters
+- Target: 512 tokens (~2048 chars with 4 chars/token estimate)
+- Overlap: 50 tokens
+- Minimum: 100 tokens (smaller chunks discarded)
+- Token counting: tiktoken `cl100k_base`, fallback to `len(text) // 4`
+
+### Line Number Tracking
+Sequential scan algorithm: after placing each chunk, scan forward from the previous chunk's end line to find the next match. Avoids false matches on duplicate code.
+
+---
+
+## CodeChunk Schema
+
+```python
+class CodeChunk(BaseModel):
+    file_path: str       # Absolute path to source file
+    start_line: int      # 1-indexed start line in original file
+    end_line: int        # 1-indexed end line (inclusive)
+    language: str        # python | javascript | typescript | java | unknown
+    content: str         # Raw chunk text
+    function_name: Optional[str]  # Extracted function/class name if found
+    dependencies: List[str]       # Import dependencies from the file
+    char_count: int      # Length in characters
+    token_count: int     # Approximate token count (tiktoken cl100k_base)
+```
+
+---
+
+## IngestionStatus Schema (Updated)
+
+```python
+class IngestionStatus(BaseModel):
+    job_id: str
+    status: str          # queued | processing | completed | failed
+    files_indexed: int
+    chunks_created: int  # Total chunks across all files
+    total_chunks: int    # Same as chunks_created (alias for clarity)
+    error: Optional[str]
+    progress_percent: int  # 0-100 (clone: 0-30, filter: 30-40, chunk: 40-100)
+    chunks: List[CodeChunk] = []  # In-memory store (moved to Qdrant in Phase 4)
+```
 
 ---
 
@@ -71,47 +113,30 @@
 
 ---
 
-## Job Tracking (In-Memory)
-
-```python
-job_store: Dict[str, IngestionStatus] = {}
-
-# IngestionStatus fields:
-# job_id: str (UUID4)
-# status: "queued" | "processing" | "completed" | "failed"
-# files_indexed: int
-# chunks_created: int (Phase 3+)
-# error: Optional[str]
-# progress_percent: int (0-100)
-```
-
-Flow: queued (5%) → processing (30% post-clone, 50% post-filter) → per-file (50–95%) → completed (100%)
-
----
-
 ## Backend Directory Structure
 
 ```
 artifacts/codemind-rag/backend/
-├── main.py              ← FastAPI entry point, CORS config
-├── config.py            ← Pydantic Settings (env vars)
-├── requirements.txt     ← 10 pinned Python packages
-├── Dockerfile
-├── docker-compose.yml   ← Qdrant placeholder for Phase 4
-├── .env.example
-├── README.md
+├── main.py
+├── config.py
+├── requirements.txt     ← Now includes langchain, tiktoken
+├── Dockerfile / docker-compose.yml
 ├── routers/
 │   ├── health.py        ← GET /api/health
-│   ├── ingest.py        ← POST /api/ingest + GET /api/ingest/status/{id}
+│   ├── ingest.py        ← POST /api/ingest + status
 │   └── query.py         ← stub (Phase 6)
 ├── services/
-│   ├── repo_cloner.py   ← GitPython clone with auth + timeout
-│   ├── file_filter.py   ← Extension + dir filter + size cap
-│   └── ingestion.py     ← Orchestrator + job_store
+│   ├── repo_cloner.py   ← GitPython clone
+│   ├── file_filter.py   ← Extension + dir filter
+│   ├── ingestion.py     ← Orchestrator (now includes chunking)
+│   ├── chunking.py      ← NEW: ChunkingService
+│   └── language_parser.py ← NEW: dependency extraction
 ├── models/
-│   └── schemas.py       ← Pydantic v2 models
+│   └── schemas.py       ← CodeChunk added, IngestionStatus extended
+├── tests/
+│   └── test_chunking.py ← 12 unit tests (12/12 pass)
 └── utils/
-    └── logger.py        ← structlog setup
+    └── logger.py
 ```
 
 ---
