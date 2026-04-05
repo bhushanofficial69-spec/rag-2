@@ -1,0 +1,300 @@
+PROJECT: CodeMind RAG - Phase 4
+OBJECTIVE: Store code chunks in vector database with metadata
+
+═══════════════════════════════════════════════════════════════════════════════
+
+BEFORE WRITING ANY CODE:
+1. Read PROJ_PLAN.md to understand current state
+2. Review backend/services/chunking.py (Phase 3 implementation)
+3. List your plan for vector DB integration and wait for approval
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TECH STACK ENFORCEMENT:
+- Vector DB Options: Pinecone (recommended) OR Supabase pgvector
+- Choice: Use Pinecone (free tier, simpler setup, better for RAG)
+- SDK: pinecone-client==3.0.0
+- Fallback: Supabase with pgvector (supabase-py)
+- Schema: Metadata stored alongside vectors
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CONTEXT:
+- Phase 1-3 completed: Frontend, backend cloning, chunking all working
+- This phase: Store chunks in vector DB (will add embeddings in Phase 5)
+- Goal: Schema ready, able to upsert/retrieve chunks with metadata
+- Embeddings added in Phase 5 (for now, use placeholder vectors)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TASKS:
+
+1. **Choose Vector Database**
+   
+   OPTION A: Pinecone (Recommended)
+   - Free tier: 1GB storage
+   - Supports metadata filtering
+   - REST API + SDK
+   - Setup: Create account at pinecone.io, get API key
+   - Create index: "codemind-codebase" with 384 dims
+   
+   OPTION B: Supabase pgvector
+   - Free tier: PostgreSQL with pgvector extension
+   - Built-in RDBMS features
+   - Setup: Create account at supabase.com, enable pgvector
+   
+   → IMPLEMENT PINECONE (easier for MVP, better vector DB)
+
+2. **Add to requirements.txt**
+pinecone-client==3.0.0
+
+3. **Create services/vector_db.py**
+   Implement VectorDBClient class with:
+   
+   a) __init__(api_key: str, environment: str, index_name: str)
+      - Initialize Pinecone client
+      - Connect to index
+      - Error handling: API key invalid, index not found
+   
+   b) Method: create_index_if_not_exists(index_name: str, dimension: int = 384)
+      - Create Pinecone index if missing
+      - Name: "codemind-codebase"
+      - Dimension: 384 (matching embeddings)
+      - Metric: "cosine"
+      - Metadata filtering enabled
+      - Logging: INFO "Index created" or "Index already exists"
+   
+   c) Method: upsert_chunk(chunk_id: str, vector: List[float], metadata: dict) -> bool
+      - Upsert (insert or update) chunk into index
+      - chunk_id: unique identifier (uuid)
+      - vector: 384-dimensional embedding (placeholder for Phase 5)
+      - metadata: CodeChunk fields as dict
+      - Return: True if successful, False if error
+      - Logging: DEBUG for each upsert
+      - Error handling: Network error, invalid vector dimension
+   
+   d) Method: upsert_chunks_batch(chunks: List[Tuple[str, List[float], dict]]) -> int
+      - Batch upsert multiple chunks (more efficient)
+      - Return: count of chunks upserted
+      - Logging: INFO "Upserted 1500 chunks"
+   
+   e) Method: query(vector: List[float], top_k: int = 10, filters: dict = None) -> List[dict]
+      - Query similar vectors
+      - vector: 384-dim query embedding
+      - top_k: return top 10 results
+      - filters: metadata filters (e.g., language="python")
+      - Return: List of dicts with id, score, metadata
+      - Will be used in Phase 6 (hybrid search)
+   
+   f) Method: delete_index(index_name: str) -> bool
+      - Delete index (for cleanup/testing)
+   
+   g) Method: get_index_stats() -> dict
+      - Return: index size, vector count, metadata
+      - Logging: INFO with stats
+
+4. **Create models/vector_schemas.py**
+   Define metadata structure:
+```python
+   class ChunkMetadata(BaseModel):
+       file_path: str
+       start_line: int
+       end_line: int
+       language: str
+       function_name: Optional[str]
+       dependencies: List[str]
+       repo_name: str
+       code_snippet: str (first 200 chars)
+       timestamp: str  # ISO format
+   
+   class VectorChunk(BaseModel):
+       id: str  # UUID
+       vector: List[float]  # 384 dims
+       metadata: ChunkMetadata
+```
+
+5. **Update config.py**
+   Add Vector DB configuration:
+```python
+   class Settings(BaseSettings):
+       # ... existing config ...
+       
+       # Vector DB (Pinecone)
+       PINECONE_API_KEY: str
+       PINECONE_ENVIRONMENT: str = "us-east-1-aws"
+       PINECONE_INDEX_NAME: str = "codemind-codebase"
+       VECTOR_DIMENSION: int = 384
+```
+
+6. **Add to .env.example**
+```env
+   # Pinecone (Vector DB)
+   PINECONE_API_KEY=your-pinecone-api-key
+   PINECONE_ENVIRONMENT=us-east-1-aws
+   PINECONE_INDEX_NAME=codemind-codebase
+   VECTOR_DIMENSION=384
+```
+
+7. **Update services/ingestion.py**
+   Extend IngestionService to:
+   - Accept VectorDBClient in __init__
+   - After chunking, upsert chunks to vector DB:
+```python
+     async def ingest_repo(self, repo_url: str, branch: str):
+         # ... Phase 2-3 code (clone, chunk) ...
+         
+         # Phase 4: Upsert chunks to vector DB
+         chunks_to_upsert = []
+         for chunk in all_chunks:
+             chunk_id = str(uuid4())
+             vector = [0.0] * 384  # Placeholder, Phase 5 adds real embeddings
+             metadata = {
+                 "file_path": chunk.file_path,
+                 "start_line": chunk.start_line,
+                 "end_line": chunk.end_line,
+                 "language": chunk.language,
+                 "function_name": chunk.function_name,
+                 "content": chunk.content,
+                 "repo_name": repo_name,
+             }
+             chunks_to_upsert.append((chunk_id, vector, metadata))
+         
+         upserted_count = await self.vector_db.upsert_chunks_batch(chunks_to_upsert)
+         logger.info(f"Upserted {upserted_count} chunks to Pinecone")
+         
+         job_status.chunks_created = upserted_count
+```
+
+8. **Update routers/ingest.py**
+   Inject VectorDBClient:
+```python
+   from services.vector_db import VectorDBClient
+   
+   vector_db = VectorDBClient(
+       api_key=settings.PINECONE_API_KEY,
+       environment=settings.PINECONE_ENVIRONMENT,
+       index_name=settings.PINECONE_INDEX_NAME,
+   )
+   
+   ingestion_service = IngestionService(vector_db=vector_db)
+```
+
+9. **Create services/vector_db_test.py**
+   Standalone test to verify Pinecone setup:
+```python
+   async def test_pinecone_connection():
+       client = VectorDBClient(
+           api_key="your-api-key",
+           environment="us-east-1-aws",
+           index_name="codemind-codebase"
+       )
+       
+       # Test upsert
+       test_vector = [0.1] * 384
+       result = await client.upsert_chunk(
+           chunk_id="test-123",
+           vector=test_vector,
+           metadata={"file_path": "test.py", "start_line": 1, "end_line": 10}
+       )
+       assert result == True, "Upsert failed"
+       
+       # Test query
+       results = await client.query(test_vector, top_k=1)
+       assert len(results) >= 1, "Query returned no results"
+       
+       print("✓ Pinecone connection test passed")
+```
+
+10. **Update models/schemas.py**
+    Extend IngestionStatus:
+```python
+    class IngestionStatus(BaseModel):
+        # ... existing fields ...
+        chunks_indexed_in_db: int = 0  # NEW
+        vector_db_status: str = "pending"  # pending, indexing, completed, failed
+```
+
+11. **Create tests/test_vector_db.py**
+    - test_upsert_single_chunk()
+    - test_upsert_batch_chunks()
+    - test_query_returns_results()
+    - test_metadata_filtering()
+    - test_index_creation()
+
+12. **Update PROJ_PLAN.md**
+    - Mark Phase 3 as ✓ COMPLETE
+    - Update current phase: Phase 4 - Vector DB (IN PROGRESS → COMPLETE)
+    - Add section: "Vector DB Schema"
+    - Add section: "Pinecone Setup Steps" (for future developers)
+    - Add section: "Query Flow (Phase 5+)"
+
+13. **Update docker-compose.yml**
+    (No new service, Pinecone is cloud-hosted)
+    - Document: Pinecone API key required in .env
+
+14. **Create PINECONE_SETUP.md**
+    Instructions for setting up Pinecone:
+    1. Sign up at pinecone.io
+    2. Create index "codemind-codebase" (384 dims, cosine)
+    3. Get API key from dashboard
+    4. Add to .env: PINECONE_API_KEY=...
+    5. Test connection with: python services/vector_db_test.py
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ACCEPTANCE CRITERIA:
+
+✓ VectorDBClient class created with all required methods
+✓ Pinecone account created, index "codemind-codebase" exists
+✓ Can upsert single chunk to Pinecone (test_upsert_single_chunk passes)
+✓ Can upsert batch of chunks (500+ chunks in <10 seconds)
+✓ Can query Pinecone (returns results with metadata)
+✓ Metadata stored alongside vectors (file_path, start_line, end_line, language, etc.)
+✓ Placeholder vectors (384 dims of zeros) accepted by Pinecone
+✓ API key in .env (not in code)
+✓ ChunkMetadata and VectorChunk models defined
+✓ IngestionService.ingest_repo() upserts chunks after chunking
+✓ POST /api/ingest flow: clone → chunk → upsert to Pinecone
+✓ GET /api/ingest/status/{job_id} shows chunks_indexed_in_db count
+✓ All unit tests pass (pytest tests/test_vector_db.py -v)
+✓ PROJ_PLAN.md updated with Phase 4 completion
+
+VERIFICATION STEPS:
+
+1. Set up Pinecone: Follow PINECONE_SETUP.md
+2. Run vector DB test: python -m pytest tests/test_vector_db.py -v
+3. Manual upsert test:
+```python
+   from services.vector_db import VectorDBClient
+   client = VectorDBClient(api_key="...", environment="...", index_name="...")
+   result = client.upsert_chunk("test-1", [0.1]*384, {"file_path": "test.py"})
+   print("✓ Upsert successful" if result else "✗ Upsert failed")
+```
+4. Check Pinecone dashboard: Index has 1 vector
+5. Full ingestion test: POST /api/ingest with test repo
+6. Monitor: GET /api/ingest/status/{job_id} shows chunks_indexed_in_db increasing
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DELIVERABLES:
+
+1. ✓ VectorDBClient class (upsert, query, batch operations)
+2. ✓ Pinecone index created ("codemind-codebase")
+3. ✓ ChunkMetadata and VectorChunk models
+4. ✓ Vector DB schema documented
+5. ✓ IngestionService upserts chunks after Phase 3 chunking
+6. ✓ Metadata stored with vectors (enabling Phase 6 filtering)
+7. ✓ Placeholder vectors ready (Phase 5 will add real embeddings)
+8. ✓ Unit tests for vector DB operations
+9. ✓ PINECONE_SETUP.md guide for setup
+10. ✓ .env template updated
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NOTES FOR REPLIT AGENT:
+
+- Placeholder vectors (384 dims of zeros) are intentional
+- Phase 5 replaces these with real embeddings from HuggingFace
+- Pinecone is cloud-hosted (no local Docker service needed)
+- Metadata filtering will be used in Phase 6 (hybrid search)
+- Chunk IDs are UUIDs (stored in Pinecone, returned in search results)
