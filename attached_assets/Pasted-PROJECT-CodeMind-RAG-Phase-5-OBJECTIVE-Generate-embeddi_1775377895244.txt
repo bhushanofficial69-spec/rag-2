@@ -1,0 +1,325 @@
+PROJECT: CodeMind RAG - Phase 5
+OBJECTIVE: Generate embeddings for chunks using HuggingFace & integrate with vector DB
+
+═══════════════════════════════════════════════════════════════════════════════
+
+BEFORE WRITING ANY CODE:
+1. Read PROJ_PLAN.md and existing code
+2. Review Phase 4 (vector DB) and Phase 3 (chunking)
+3. List your plan for embedding generation and wait for approval
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TECH STACK ENFORCEMENT:
+- Embedding Model: sentence-transformers/all-MiniLM-L6-v2 (384 dimensions)
+- API: HuggingFace Inference API (free tier)
+- Caching: In-memory cache (LRU) or file-based JSON
+- Async: httpx for async HTTP requests
+- Batch Processing: Group chunks into batches of 16
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CONTEXT:
+- Phase 1-4 complete: Frontend, backend, chunking, vector DB ready
+- Phase 5 fills in the gaps: Generate real embeddings (replace placeholder zeros)
+- Goal: Transform chunks into 384-dim vectors, cache results, persist to Pinecone
+- Next: Phase 6 uses these embeddings for similarity search
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TASKS:
+
+1. **Create services/embeddings.py**
+   Implement EmbeddingGenerator class:
+   
+   a) __init__(api_key: str, model_name: str = "sentence-transformers/all-MiniLM-L6-v2")
+      - Store HuggingFace API key
+      - Verify model name (hardcoded to all-MiniLM for MVP)
+      - Initialize HTTP client (httpx.AsyncClient)
+      - Initialize cache (in-memory dict or Redis)
+   
+   b) Method: generate_embedding(text: str) -> List[float]
+      - Input: text to embed (code chunk content)
+      - Call HuggingFace Inference API
+      - Return: 384-dimensional vector
+      - Error handling: API timeout (retry 3x), invalid API key (fail hard)
+      - Logging: DEBUG "Embedding generated for {len(text)} chars"
+   
+   c) Method: generate_embeddings_batch(texts: List[str]) -> List[List[float]]
+      - Input: list of texts (batch size 16 for efficiency)
+      - Call HuggingFace API once with all texts
+      - Return: List of 384-dim vectors
+      - Batch size: 16 (HuggingFace recommendation)
+      - Timeout: 30 seconds
+      - Logging: INFO "Generated embeddings for batch of {len(texts)}"
+   
+   d) Method: cache_get(text_hash: str) -> Optional[List[float]]
+      - Check if embedding already cached
+      - text_hash: SHA256(text) for lookup
+      - Return: cached vector or None
+   
+   e) Method: cache_set(text_hash: str, vector: List[float])
+      - Store embedding in cache
+      - Logging: DEBUG "Cached embedding for {text_hash}"
+   
+   f) Property: cache_stats() -> dict
+      - Return: {"hits": int, "misses": int, "size": int}
+
+2. **Add to requirements.txt**
+httpx==0.25.2
+huggingface-hub==0.19.0
+
+3. **Update config.py**
+   Add embedding configuration:
+```python
+   class Settings(BaseSettings):
+       # ... existing ...
+       
+       # Embeddings
+       HUGGINGFACE_API_KEY: str
+       EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+       EMBEDDING_DIMENSION: int = 384
+       EMBEDDING_BATCH_SIZE: int = 16
+       EMBEDDING_CACHE_TTL: int = 604800  # 7 days in seconds
+```
+
+4. **Add to .env.example**
+```env
+   # HuggingFace (Embeddings)
+   HUGGINGFACE_API_KEY=your-hf-api-key
+   EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+```
+
+5. **Create services/embedding_cache.py**
+   Implement EmbeddingCache class (optional but recommended):
+```python
+   class EmbeddingCache:
+       def __init__(self, max_size: int = 10000):
+           self.cache = {}  # {text_hash: vector}
+           self.hits = 0
+           self.misses = 0
+       
+       def get(self, text_hash: str) -> Optional[List[float]]:
+           if text_hash in self.cache:
+               self.hits += 1
+               return self.cache[text_hash]
+           self.misses += 1
+           return None
+       
+       def set(self, text_hash: str, vector: List[float]):
+           self.cache[text_hash] = vector
+       
+       def stats(self) -> dict:
+           total = self.hits + self.misses
+           hit_rate = self.hits / total if total > 0 else 0
+           return {
+               "hits": self.hits,
+               "misses": self.misses,
+               "hit_rate": hit_rate,
+               "size": len(self.cache)
+           }
+```
+
+6. **Create utils/hashing.py**
+   Helper for consistent hashing:
+```python
+   import hashlib
+   
+   def hash_text(text: str) -> str:
+       return hashlib.sha256(text.encode()).hexdigest()
+```
+
+7. **Update services/ingestion.py**
+   Extend IngestionService to generate embeddings:
+```python
+   class IngestionService:
+       def __init__(self, vector_db, embedding_generator):
+           self.vector_db = vector_db
+           self.embedding_generator = embedding_generator
+       
+       async def ingest_repo(self, repo_url: str, branch: str):
+           # ... Phase 2-4 code (clone, chunk, prepare) ...
+           
+           # Phase 5: Generate embeddings for chunks
+           chunks_with_vectors = []
+           for i, chunk in enumerate(all_chunks):
+               # Get or generate embedding
+               text_hash = hash_text(chunk.content)
+               vector = self.embedding_generator.cache_get(text_hash)
+               
+               if vector is None:
+                   # Generate new embedding (batch them)
+                   # For now, generate individually (Phase 5+ can optimize)
+                   vector = self.embedding_generator.generate_embedding(chunk.content)
+                   self.embedding_generator.cache_set(text_hash, vector)
+               
+               chunks_with_vectors.append((chunk.id, vector, chunk.metadata_dict()))
+               
+               # Progress update every 100 chunks
+               if (i + 1) % 100 == 0:
+                   logger.info(f"Generated embeddings for {i+1}/{len(all_chunks)} chunks")
+           
+           # Upsert to Pinecone with real vectors (not placeholder zeros)
+           upserted_count = await self.vector_db.upsert_chunks_batch(chunks_with_vectors)
+           logger.info(f"Upserted {upserted_count} chunks with embeddings to Pinecone")
+           
+           job_status.chunks_indexed_in_db = upserted_count
+           job_status.embeddings_generated = len(chunks_with_vectors)
+```
+
+8. **Add to routers/ingest.py**
+   Inject EmbeddingGenerator:
+```python
+   from services.embeddings import EmbeddingGenerator
+   
+   embedding_generator = EmbeddingGenerator(
+       api_key=settings.HUGGINGFACE_API_KEY,
+       model_name=settings.EMBEDDING_MODEL
+   )
+   
+   ingestion_service = IngestionService(
+       vector_db=vector_db,
+       embedding_generator=embedding_generator
+   )
+```
+
+9. **Optimize: Batch Processing (Phase 5+)**
+   For large repos, batch chunks before embedding:
+```python
+   async def ingest_repo_optimized(self, repo_url: str, branch: str):
+       # ... Phase 2-4 code ...
+       
+       # Phase 5: Batch embed all chunks
+       batch_size = 16
+       for i in range(0, len(all_chunks), batch_size):
+           batch_chunks = all_chunks[i:i+batch_size]
+           batch_texts = [c.content for c in batch_chunks]
+           
+           # Generate embeddings for entire batch at once
+           vectors = self.embedding_generator.generate_embeddings_batch(batch_texts)
+           
+           # Cache each
+           for chunk, vector in zip(batch_chunks, vectors):
+               text_hash = hash_text(chunk.content)
+               self.embedding_generator.cache_set(text_hash, vector)
+           
+           logger.info(f"Batch embedded {i+batch_size}/{len(all_chunks)}")
+```
+
+10. **Update models/schemas.py**
+    Extend IngestionStatus:
+```python
+    class IngestionStatus(BaseModel):
+        # ... existing fields ...
+        embeddings_generated: int = 0  # NEW
+        embedding_cache_hits: int = 0  # NEW
+        total_embedding_api_calls: int = 0  # NEW
+```
+
+11. **Create tests/test_embeddings.py**
+    - test_embedding_dimension_is_384()
+    - test_batch_embeddings_same_as_individual()
+    - test_cache_stores_and_retrieves()
+    - test_cache_hit_rate_improves()
+    - test_hf_api_timeout_retry()
+    - test_different_texts_different_vectors()
+
+12. **Create HF_SETUP.md**
+    Instructions for HuggingFace:
+    1. Sign up at huggingface.co
+    2. Create access token at huggingface.co/settings/tokens
+    3. Add to .env: HUGGINGFACE_API_KEY=hf_...
+    4. Test: python -c "from services.embeddings import EmbeddingGenerator; EmbeddingGenerator.test()"
+
+13. **Update PROJ_PLAN.md**
+    - Mark Phase 4 as ✓ COMPLETE
+    - Current phase: Phase 5 - Embeddings (IN PROGRESS → COMPLETE)
+    - Add section: "Embedding Stats" (cache hit rate, API calls)
+    - Add note: "Phase 5 completed: All chunks have real embeddings in Pinecone"
+
+14. **Performance Optimization (Optional)**
+    For MVP, sequential embedding is fine, but document for future:
+    - Async batch requests (concurrent API calls)
+    - Streaming embeddings (don't wait for all chunks)
+    - Progressive indexing (show progress to user)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ACCEPTANCE CRITERIA:
+
+✓ EmbeddingGenerator creates 384-dimensional vectors
+✓ Vectors from HuggingFace Inference API (real, not placeholder)
+✓ Cache stores embeddings (prevents duplicate API calls)
+✓ Batch embedding API more efficient than single requests
+✓ Retry logic on API timeout (3 attempts with exponential backoff)
+✓ All chunks in Pinecone have real embeddings (not zeros)
+✓ Ingestion updates vector DB with new embeddings (not placeholder zeros)
+✓ Cache stats tracked (hits, misses, hit rate)
+✓ 500-chunk ingestion <2 minutes (with caching benefit)
+✓ Vectors are deterministic (same text = same vector)
+✓ Unit tests pass (pytest tests/test_embeddings.py -v)
+✓ HF API key not in code (only in .env)
+
+VERIFICATION STEPS:
+
+1. Set up HuggingFace: Follow HF_SETUP.md
+2. Test embedding generation:
+```python
+   from services.embeddings import EmbeddingGenerator
+   gen = EmbeddingGenerator(api_key="your-key")
+   vector = gen.generate_embedding("def hello(): pass")
+   assert len(vector) == 384
+   assert isinstance(vector[0], float)
+   print("✓ Embedding generated successfully")
+```
+3. Test batch embedding:
+```python
+   texts = ["code chunk 1", "code chunk 2", "code chunk 3"]
+   vectors = gen.generate_embeddings_batch(texts)
+   assert len(vectors) == 3
+   assert all(len(v) == 384 for v in vectors)
+   print("✓ Batch embedding successful")
+```
+4. Test cache:
+```python
+   from utils.hashing import hash_text
+   text = "def test(): pass"
+   hash1 = hash_text(text)
+   v1 = gen.generate_embedding(text)
+   v2 = gen.generate_embedding(text)
+   assert v1 == v2
+   assert gen.cache_stats()["hit_rate"] > 0
+   print("✓ Cache working")
+```
+5. Full ingestion with embeddings:
+   - POST /api/ingest with test repo
+   - Monitor: Embeddings being generated (INFO logs)
+   - GET /api/ingest/status/{job_id} shows embeddings_generated count
+6. Verify Pinecone updated:
+   - Check Pinecone dashboard: vectors are no longer all-zeros
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DELIVERABLES:
+
+1. ✓ EmbeddingGenerator class with HuggingFace API integration
+2. ✓ Embedding cache (in-memory) with hit/miss tracking
+3. ✓ Batch embedding support (16 texts at once)
+4. ✓ Retry logic for API failures
+5. ✓ Integration with IngestionService (replace zeros with real vectors)
+6. ✓ All chunks in Pinecone have real 384-dim embeddings
+7. ✓ Cache stats available for monitoring
+8. ✓ Unit tests for embedding generation and caching
+9. ✓ HF_SETUP.md guide for HuggingFace setup
+10. ✓ PROJ_PLAN.md updated
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NOTES FOR REPLIT AGENT:
+
+- HuggingFace free tier: ~30K tokens/day
+- All-MiniLM-L6-v2 is the best free, open-source embedding model (384 dims)
+- Cache dramatically reduces API calls (important for cost)
+- Batch requests: 16 texts = 1 API call (16x more efficient)
+- Phase 6 uses these embeddings for semantic search
+- Deterministic: same text always produces same vector

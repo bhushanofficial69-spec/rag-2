@@ -51,6 +51,8 @@ class IngestionStatus(BaseModel):
     files_indexed: int
     chunks_created: int
     total_chunks: int = 0
+    chunks_indexed_in_db: int = 0
+    vector_db_status: str = "pending"
     error: Optional[str] = None
     progress_percent: int
     chunks: List[CodeChunk] = []

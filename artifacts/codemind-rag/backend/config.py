@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     TEMP_DIR: str = "./temp"
     LOG_LEVEL: str = "INFO"
 
+    QDRANT_URL: Optional[str] = None
+    QDRANT_API_KEY: Optional[str] = None
+    QDRANT_COLLECTION_NAME: str = "codemind-codebase"
+    VECTOR_DIMENSION: int = 384
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
