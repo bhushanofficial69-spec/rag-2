@@ -8,102 +8,89 @@
 | Phase 2 | GitHub Repo Cloning & Ingestion Pipeline | ✅ COMPLETE | 2026-04-04 |
 | Phase 3 | Language-Aware Code Chunking Engine | ✅ COMPLETE | 2026-04-04 |
 | Phase 4 | Qdrant Vector DB Integration | ✅ COMPLETE | 2026-04-05 |
-| Phase 5 | Embedding Generation (HuggingFace) | PENDING | — |
-| Phase 6 | Groq LLM Integration & RAG Chain | PENDING | — |
+| Phase 5 | Embedding Generation (HuggingFace + Local Mock) | ✅ COMPLETE | 2026-04-05 |
+| Phase 6 | Hybrid Search + Groq LLM & RAG Chain | PENDING | — |
 | Phase 7 | Citation Extraction & Dependency Tracking | PENDING | — |
 | Phase 8 | Frontend UI (Next.js App Router) | PENDING | — |
 | Phase 9 | Deployment, Testing & Production Hardening | PENDING | — |
 
 ---
 
-## Phase 4 Completion Checklist ✅ COMPLETE
+## Phase 5 Completion Checklist ✅ COMPLETE
 
-- [x] `qdrant-client==1.7.0` installed
-- [x] `models/vector_schemas.py` — ChunkMetadata, VectorChunk Pydantic models
-- [x] `services/vector_db.py` — VectorDBClient with full API
-  - [x] `create_collection_if_not_exists()` — creates cosine 384-dim collection
-  - [x] `upsert_chunk()` — single point upsert
-  - [x] `upsert_chunks_batch()` — batch upsert in 100-point batches
-  - [x] `query()` — dense similarity search with optional metadata filter
-  - [x] `delete_collection()` — cleanup
-  - [x] `get_collection_stats()` — vector count, config
-  - [x] Graceful degradation — all methods return safe defaults when unavailable
-- [x] `config.py` updated — QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION_NAME, VECTOR_DIMENSION
-- [x] `models/schemas.py` updated — `chunks_indexed_in_db`, `vector_db_status` fields added
-- [x] `services/ingestion.py` updated — upserts chunks to Qdrant after chunking
-- [x] `routers/health.py` updated — shows `"qdrant": "connected" | "not_configured"`
-- [x] `main.py` updated — initializes VectorDBClient at startup, injects into services
-- [x] `tests/test_vector_db.py` — 8 unit tests using in-memory Qdrant (no API key needed)
-- [x] `QDRANT_SETUP.md` — step-by-step Qdrant Cloud setup guide
-- [x] `.env.example` updated with Qdrant vars
-- [x] **20/20 tests pass** (12 chunking + 8 vector DB)
+- [x] `utils/hashing.py` — SHA-256 text hashing helper
+- [x] `services/embedding_cache.py` — LRU-style in-memory cache (max_size eviction, hit/miss tracking)
+- [x] `services/embeddings.py` — EmbeddingGenerator class
+  - [x] HuggingFace Inference API mode (when HUGGINGFACE_API_KEY is set)
+  - [x] Local mock mode (always available — deterministic unit-normalised 384-dim vectors from SHA-256)
+  - [x] `generate_embedding(text)` with cache-check and cache-set
+  - [x] `generate_embeddings_batch(texts)` — batch of 16, cache-aware
+  - [x] Retry logic: 3 attempts with exponential backoff on network errors
+  - [x] Hard fail on 401 (invalid API key)
+  - [x] `mode` property: `"huggingface_api"` | `"local_mock"`
+  - [x] `cache_stats()` → hits, misses, hit_rate, api_calls, mode
+- [x] `services/vector_db.py` upgraded
+  - [x] In-memory Qdrant fallback (when no QDRANT_URL/API_KEY)
+  - [x] Cloud mode when credentials provided
+  - [x] `storage_mode` property: `"cloud"` | `"in-memory"`
+  - [x] Graceful fallback to in-memory if Cloud connection fails
+- [x] `services/ingestion.py` upgraded
+  - [x] Batch embedding via `generate_embeddings_batch()` (16 per batch)
+  - [x] Embedding stats tracked per job (generated, cache_hits, api_calls)
+  - [x] All 178 chunks embed + upsert to in-memory Qdrant in <1s
+- [x] `config.py` updated — HUGGINGFACE_API_KEY, EMBEDDING_MODEL, EMBEDDING_BATCH_SIZE, EMBEDDING_CACHE_SIZE, EMBEDDING_CACHE_TTL
+- [x] `models/schemas.py` updated — `embeddings_generated`, `embedding_cache_hits`, `total_embedding_api_calls`, `embedding_mode`
+- [x] `routers/health.py` updated — shows `"huggingface": "connected" | "local-mock" | "not_configured"`, `"qdrant": "cloud" | "in-memory"`
+- [x] `main.py` updated — initializes EmbeddingCache + EmbeddingGenerator + injects into IngestionService
+- [x] `tests/test_embeddings.py` — 16 unit tests (all pass)
+- [x] `HF_SETUP.md` — HuggingFace setup guide
+- [x] `requirements.txt` updated with huggingface-hub
+- [x] `.env.example` updated with embedding vars
+- [x] **36/36 tests pass** (12 chunking + 8 vector DB + 16 embeddings)
 
-**Test results:**
-- In-memory Qdrant used for tests (no API key required for CI)
-- All batch upsert, query, metadata preservation tests pass
-- Graceful degradation: unavailable client returns safe defaults
-
-**Pending (needs user action):**
-- QDRANT_URL and QDRANT_API_KEY secrets need to be set in Replit Secrets
-- Once set, health endpoint shows `"qdrant": "connected"`
-- Full ingestion test with real Qdrant Cloud (Phase 5 adds real embeddings)
-
----
-
-## Vector DB Schema (Qdrant)
-
-### Collection: `codemind-codebase`
-| Field | Type | Description |
-|-------|------|-------------|
-| `vector` | float[384] | Dense embedding (placeholder zeros until Phase 5) |
-| `distance` | cosine | Similarity metric |
-
-### Payload (Metadata per chunk)
-| Field | Type | Description |
-|-------|------|-------------|
-| `file_path` | str | Absolute path in cloned repo |
-| `start_line` | int | 1-indexed start line |
-| `end_line` | int | 1-indexed end line |
-| `language` | str | python / javascript / typescript / java |
-| `function_name` | str? | Extracted function/class name |
-| `dependencies` | str[] | Import dependencies |
-| `repo_name` | str | `owner/repo` |
-| `code_snippet` | str | First 200 chars of chunk |
-| `content` | str | Full chunk text |
-| `char_count` | int | Length in characters |
-| `token_count` | int | Approximate tokens |
-| `timestamp` | str | ISO 8601 ingest time |
+### Embedding Stats (psf/requests end-to-end test)
+- Files: 35 | Chunks: 178 | Embeddings: 178 | Indexed: 178
+- Time: < 1s total (mock mode, no API calls)
+- Qdrant: in-memory | Embeddings: local-mock
 
 ---
 
-## Qdrant Setup Steps (for developers)
+## Local Development Mode (No API Keys Required)
 
-See `artifacts/codemind-rag/backend/QDRANT_SETUP.md` for full instructions.
+All services run in local/mock mode with zero credentials:
 
-1. Sign up at [cloud.qdrant.io](https://cloud.qdrant.io) (free 1GB)
-2. Create cluster → get URL + API key
-3. Set `QDRANT_URL` and `QDRANT_API_KEY` in Replit Secrets
-4. Collection `codemind-codebase` (384-dim, cosine) auto-created on first ingest
+| Service | Mode | Behaviour |
+|---------|------|-----------|
+| Qdrant | in-memory | Full upsert/query, data lost on restart |
+| HuggingFace | local-mock | Deterministic SHA-256 384-dim unit vectors |
+| Groq | disconnected | Added in Phase 6 |
 
----
-
-## Query Flow (Phase 5+)
-
+Health endpoint shows:
+```json
+{
+  "services": {
+    "qdrant": "in-memory",
+    "huggingface": "local-mock",
+    "groq": "disconnected"
+  }
+}
 ```
-User question
-    ↓
-Embed with all-MiniLM-L6-v2 → 384-dim vector  [Phase 5]
-    ↓
-Dense search: Qdrant cosine similarity, top-10  [Phase 5]
-    ↓
-Sparse search: BM25 keyword match, top-10       [Phase 5]
-    ↓
-Merge with RRF (k=60) → ranked top-10           [Phase 5]
-    ↓
-Format context → Groq llama-3.1-70b             [Phase 6]
-    ↓
-Extract citations → render in frontend          [Phase 7-8]
-```
+
+**Upgrade to cloud:** Set `QDRANT_URL` + `QDRANT_API_KEY` → qdrant becomes `"cloud"`.
+Set `HUGGINGFACE_API_KEY` → huggingface becomes `"connected"`.
+
+---
+
+## Embedding Stats
+
+| Metric | Description |
+|--------|-------------|
+| `embeddings_generated` | Total chunks embedded this job |
+| `embedding_cache_hits` | Chunks served from cache (duplicate content) |
+| `total_embedding_api_calls` | HF API calls made (0 in mock mode) |
+| `embedding_mode` | `local_mock` or `huggingface_api` |
+
+Cache hit rate improves significantly for repos with repeated patterns.
 
 ---
 
@@ -111,11 +98,44 @@ Extract citations → render in frontend          [Phase 7-8]
 
 | Endpoint | Method | Status Code | Phase | Status |
 |----------|--------|-------------|-------|--------|
-| `/api/health` | GET | 200 | Phase 2 | ✅ Live (shows Qdrant status) |
-| `/api/ingest` | POST | 202 | Phase 2 | ✅ Live |
+| `/api/health` | GET | 200 | Phase 2 | ✅ Live (qdrant + huggingface status) |
+| `/api/ingest` | POST | 202 | Phase 2 | ✅ Live (now includes embedding stats) |
 | `/api/ingest/status/{job_id}` | GET | 200 / 404 | Phase 2 | ✅ Live |
 | `/api/query` | POST | 200 | Phase 6 | Pending |
 | `/api/dependencies` | GET | 200 | Phase 7 | Pending |
+
+---
+
+## Phase 4 Completion Checklist ✅ COMPLETE
+
+- [x] qdrant-client==1.7.0 installed
+- [x] `models/vector_schemas.py` — ChunkMetadata, VectorChunk
+- [x] `services/vector_db.py` — VectorDBClient (full CRUD + graceful degradation)
+- [x] `config.py` — QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION_NAME, VECTOR_DIMENSION
+- [x] `models/schemas.py` — chunks_indexed_in_db, vector_db_status
+- [x] `services/ingestion.py` — upserts to Qdrant after chunking
+- [x] `routers/health.py` — qdrant connection status
+- [x] `main.py` — VectorDBClient startup wiring
+- [x] `tests/test_vector_db.py` — 8 unit tests
+- [x] `QDRANT_SETUP.md` — setup guide
+
+---
+
+## Query Flow (Phase 6+)
+
+```
+User question
+    ↓
+Embed with EmbeddingGenerator → 384-dim vector     [Phase 5 ✅]
+    ↓
+Dense search: Qdrant cosine similarity, top-10      [Phase 6]
+    ↓
+(Optional) BM25 keyword match + RRF merge           [Phase 6]
+    ↓
+Format context → Groq llama-3.1-70b                 [Phase 6]
+    ↓
+Extract file citations → render in frontend         [Phase 7-8]
+```
 
 ---
 
@@ -126,3 +146,4 @@ Extract citations → render in frontend          [Phase 7-8]
 3. Phase status in this file is updated at the end of every phase
 4. The main agent waits for a Master Prompt before beginning each phase
 5. All secrets stored in environment variables — never in code
+6. All services have local fallbacks (no credentials required for dev)

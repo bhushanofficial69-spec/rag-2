@@ -53,6 +53,10 @@ class IngestionStatus(BaseModel):
     total_chunks: int = 0
     chunks_indexed_in_db: int = 0
     vector_db_status: str = "pending"
+    embeddings_generated: int = 0
+    embedding_cache_hits: int = 0
+    total_embedding_api_calls: int = 0
+    embedding_mode: str = "local_mock"
     error: Optional[str] = None
     progress_percent: int
     chunks: List[CodeChunk] = []

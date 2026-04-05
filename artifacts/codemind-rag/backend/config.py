@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     QDRANT_COLLECTION_NAME: str = "codemind-codebase"
     VECTOR_DIMENSION: int = 384
 
+    HUGGINGFACE_API_KEY: Optional[str] = None
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_DIMENSION: int = 384
+    EMBEDDING_BATCH_SIZE: int = 16
+    EMBEDDING_CACHE_TTL: int = 604800
+    EMBEDDING_CACHE_SIZE: int = 10000
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

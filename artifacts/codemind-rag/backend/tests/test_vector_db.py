@@ -33,6 +33,7 @@ def _make_in_memory_client(collection_name: str = "test-codebase", dim: int = 4)
     vdb.collection_name = collection_name
     vdb.dimension = dim
     vdb._available = True
+    vdb._cloud_mode = False
     return vdb
 
 
@@ -99,6 +100,7 @@ def test_collection_creation():
     vdb.collection_name = "new-collection"
     vdb.dimension = DIM
     vdb._available = True
+    vdb._cloud_mode = False
 
     result = vdb.create_collection_if_not_exists()
     assert result is True

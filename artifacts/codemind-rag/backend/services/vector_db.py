@@ -1,10 +1,20 @@
+"""
+VectorDBClient — wraps Qdrant (Cloud or in-memory).
+
+Priority:
+  1. Qdrant Cloud  — when QDRANT_URL + QDRANT_API_KEY are set
+  2. In-memory     — always available, zero config, perfect for local dev
+
+In-memory Qdrant is fully functional (upsert, query, delete) but does NOT
+persist data between restarts.  It's the development fallback until Cloud
+credentials are supplied.
+"""
+
 import uuid
-from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qdrant_models
-from qdrant_client.http.exceptions import UnexpectedResponse
 
 from utils.logger import get_logger
 
@@ -14,23 +24,47 @@ BATCH_SIZE = 100
 
 
 class VectorDBClient:
-    def __init__(self, url: str, api_key: str, collection_name: str, dimension: int = 384):
+    def __init__(
+        self,
+        url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        collection_name: str = "codemind-codebase",
+        dimension: int = 384,
+    ):
         self.collection_name = collection_name
         self.dimension = dimension
-        self._available = False
+        self._cloud_mode = bool(url and api_key)
 
-        try:
-            self.client = QdrantClient(url=url, api_key=api_key, timeout=30)
-            self.client.get_collections()
+        if self._cloud_mode:
+            try:
+                self.client = QdrantClient(url=url, api_key=api_key, timeout=30)
+                self.client.get_collections()
+                self._available = True
+                logger.info("qdrant_cloud_connected", url=url)
+            except Exception as exc:
+                logger.warning(
+                    "qdrant_cloud_unavailable",
+                    error=str(exc),
+                    fallback="in-memory",
+                )
+                self.client = QdrantClient(":memory:")
+                self._cloud_mode = False
+                self._available = True
+        else:
+            self.client = QdrantClient(":memory:")
             self._available = True
-            logger.info("qdrant_connected", url=url, collection=collection_name)
-        except Exception as exc:
-            self.client = None
-            logger.warning("qdrant_unavailable", error=str(exc))
+            logger.info(
+                "qdrant_in_memory",
+                note="Set QDRANT_URL + QDRANT_API_KEY to enable Cloud persistence",
+            )
 
     @property
     def available(self) -> bool:
         return self._available
+
+    @property
+    def storage_mode(self) -> str:
+        return "cloud" if self._cloud_mode else "in-memory"
 
     def create_collection_if_not_exists(self) -> bool:
         if not self._available:
@@ -40,7 +74,6 @@ class VectorDBClient:
             if self.collection_name in existing:
                 logger.info("qdrant_collection_exists", name=self.collection_name)
                 return True
-
             self.client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=qdrant_models.VectorParams(
@@ -52,6 +85,7 @@ class VectorDBClient:
                 "qdrant_collection_created",
                 name=self.collection_name,
                 dimension=self.dimension,
+                mode=self.storage_mode,
             )
             return True
         except Exception as exc:
@@ -68,9 +102,7 @@ class VectorDBClient:
                 collection_name=self.collection_name,
                 points=[
                     qdrant_models.PointStruct(
-                        id=chunk_id,
-                        vector=vector,
-                        payload=metadata,
+                        id=chunk_id, vector=vector, payload=metadata
                     )
                 ],
             )
@@ -90,9 +122,7 @@ class VectorDBClient:
         for i in range(0, len(chunks), BATCH_SIZE):
             batch = chunks[i : i + BATCH_SIZE]
             points = [
-                qdrant_models.PointStruct(
-                    id=cid, vector=vec, payload=meta
-                )
+                qdrant_models.PointStruct(id=cid, vector=vec, payload=meta)
                 for cid, vec, meta in batch
             ]
             try:
@@ -107,13 +137,13 @@ class VectorDBClient:
                     total_so_far=total_upserted,
                 )
             except Exception as exc:
-                logger.error(
-                    "qdrant_batch_upsert_failed",
-                    batch_start=i,
-                    error=str(exc),
-                )
+                logger.error("qdrant_batch_upsert_failed", batch_start=i, error=str(exc))
 
-        logger.info("qdrant_upsert_complete", total=total_upserted)
+        logger.info(
+            "qdrant_upsert_complete",
+            total=total_upserted,
+            mode=self.storage_mode,
+        )
         return total_upserted
 
     def query(
@@ -129,8 +159,7 @@ class VectorDBClient:
         if filters:
             conditions = [
                 qdrant_models.FieldCondition(
-                    key=k,
-                    match=qdrant_models.MatchValue(value=v),
+                    key=k, match=qdrant_models.MatchValue(value=v)
                 )
                 for k, v in filters.items()
             ]
@@ -145,11 +174,7 @@ class VectorDBClient:
                 with_payload=True,
             )
             return [
-                {
-                    "id": str(r.id),
-                    "score": r.score,
-                    "metadata": r.payload,
-                }
+                {"id": str(r.id), "score": r.score, "metadata": r.payload}
                 for r in results
             ]
         except Exception as exc:
@@ -174,6 +199,7 @@ class VectorDBClient:
             info = self.client.get_collection(self.collection_name)
             return {
                 "status": "ok",
+                "mode": self.storage_mode,
                 "vectors_count": info.vectors_count,
                 "points_count": info.points_count,
                 "dimension": self.dimension,
