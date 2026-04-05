@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from config import settings
 from models.schemas import IngestionStatus, CodeChunk
+from models.search_schemas import RepoContext
 from services.repo_cloner import RepoCloner
 from services.file_filter import FileFilter
 from services.chunking import chunking_service
@@ -20,14 +21,16 @@ logger = get_logger(__name__)
 _executor = ThreadPoolExecutor(max_workers=4)
 
 job_store: Dict[str, IngestionStatus] = {}
+INDEXED_REPOS: Dict[str, RepoContext] = {}
 
 
 class IngestionService:
-    def __init__(self, vector_db=None, embedding_generator=None):
+    def __init__(self, vector_db=None, embedding_generator=None, keyword_index=None):
         self.cloner = RepoCloner()
         self.filter = FileFilter()
         self.vector_db = vector_db
         self.embedding_generator = embedding_generator
+        self.keyword_index = keyword_index
 
     def ingest_repo(self, repo_url: str, branch: str) -> str:
         job_id = str(uuid.uuid4())
@@ -73,11 +76,13 @@ class IngestionService:
             self._update_job(job_id, progress_percent=40, files_indexed=total_files)
 
             all_chunks: List[CodeChunk] = []
+            languages_seen = set()
 
             for idx, fpath in enumerate(code_files):
                 try:
                     content = Path(fpath).read_text(encoding="utf-8", errors="ignore")
                     language = self.filter.detect_language(fpath)
+                    languages_seen.add(language)
                     chunks = chunking_service.chunk_code(content, language, fpath)
                     deps = language_parser.extract_dependencies(content, language, fpath)
                     for chunk in chunks:
@@ -119,6 +124,16 @@ class IngestionService:
                 embedding_cache_hits=embed_stats.get("cache_hits", 0),
                 total_embedding_api_calls=embed_stats.get("api_calls", 0),
             )
+
+            INDEXED_REPOS[repo_name] = RepoContext(
+                repo_name=repo_name,
+                repo_url=repo_url,
+                languages=sorted(languages_seen),
+                file_count=total_files,
+                chunk_count=len(all_chunks),
+                indexed_at=datetime.now(timezone.utc).isoformat(),
+            )
+
             logger.info(
                 "ingestion_complete",
                 job_id=job_id,
@@ -150,19 +165,20 @@ class IngestionService:
         has_embedder = self.embedding_generator is not None
         has_vector_db = self.vector_db is not None and self.vector_db.available
 
-        if not has_vector_db:
-            logger.info("vector_db_skipped", job_id=job_id, reason="not available")
-            self._update_job(job_id, vector_db_status="skipped")
-            if has_embedder:
-                self._generate_embeddings_only(job_id, chunks, embed_stats)
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        if not has_vector_db and not self.keyword_index:
+            logger.info("all_indexes_skipped", job_id=job_id)
             return 0, embed_stats
 
         self._update_job(job_id, vector_db_status="indexing", progress_percent=75)
-        self.vector_db.create_collection_if_not_exists()
 
-        timestamp = datetime.now(timezone.utc).isoformat()
+        if has_vector_db:
+            self.vector_db.create_collection_if_not_exists()
+
         batch_size = settings.EMBEDDING_BATCH_SIZE
-        all_batches: List[Tuple[str, List[float], Dict]] = []
+        all_vector_batches: List[Tuple] = []
+        keyword_docs: List[Dict] = []
 
         cache_hits_before = (
             self.embedding_generator._cache.hits if has_embedder else 0
@@ -193,7 +209,8 @@ class IngestionService:
                     "token_count": chunk.token_count,
                     "timestamp": timestamp,
                 }
-                all_batches.append((chunk_id, vector, metadata))
+                all_vector_batches.append((chunk_id, vector, metadata))
+                keyword_docs.append({"id": chunk_id, "content": chunk.content, "metadata": metadata})
 
             progress = 75 + int((i + len(batch_chunks)) / max(len(chunks), 1) * 20)
             self._update_job(
@@ -201,14 +218,22 @@ class IngestionService:
                 progress_percent=min(progress, 95),
                 embeddings_generated=i + len(batch_chunks),
             )
-            logger.debug(
-                "embedding_batch_complete",
+
+        indexed = 0
+        if has_vector_db and all_vector_batches:
+            indexed = self.vector_db.upsert_chunks_batch(all_vector_batches)
+
+        if self.keyword_index and keyword_docs:
+            self.keyword_index.add_chunks_batch(keyword_docs)
+            logger.info(
+                "keyword_index_updated",
                 job_id=job_id,
-                processed=i + len(batch_chunks),
-                total=len(chunks),
+                chunks=len(keyword_docs),
+                total_indexed=self.keyword_index.size,
             )
 
-        indexed = self.vector_db.upsert_chunks_batch(all_batches)
+        if not has_vector_db:
+            indexed = len(keyword_docs)
 
         if has_embedder:
             cache_hits_after = self.embedding_generator._cache.hits
@@ -220,23 +245,10 @@ class IngestionService:
             "embed_and_upsert_complete",
             job_id=job_id,
             indexed=indexed,
+            keyword_indexed=len(keyword_docs),
             **embed_stats,
         )
         return indexed, embed_stats
-
-    def _generate_embeddings_only(
-        self, job_id: str, chunks: List[CodeChunk], embed_stats: Dict
-    ) -> None:
-        batch_size = settings.EMBEDDING_BATCH_SIZE
-        for i in range(0, len(chunks), batch_size):
-            batch = chunks[i : i + batch_size]
-            self.embedding_generator.generate_embeddings_batch(
-                [c.content for c in batch]
-            )
-        embed_stats["generated"] = len(chunks)
-        if self.embedding_generator:
-            embed_stats["cache_hits"] = self.embedding_generator._cache.hits
-            embed_stats["api_calls"] = self.embedding_generator._total_api_calls
 
     def _update_job(self, job_id: str, **kwargs) -> None:
         if job_id not in job_store:
